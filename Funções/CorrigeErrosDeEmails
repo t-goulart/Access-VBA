@@ -1,0 +1,6 @@
+Public Function CorrigeErrosDeEmails(Email As String)
+'Essa função corrige possíveis erros nos e-mails cadastrados
+
+CorrigeErrosDeEmails = Replace(Replace(Replace(Email, ",", ";"), "com.vê", "com.br"), ".@", "@")
+
+End Function
