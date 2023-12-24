@@ -1,0 +1,94 @@
+Public Function EmiteAlertaTabelaSemDados(Campo As String, NomeDaTabela As String, NomeDoArquivoAccess As String, Optional QtdeMinimaCaracteres As Integer = 0)
+'Essa função verifica se uma tabela contém informações ou se o campo informado contém a qtde mínima de caracteres _
+    Se não atender aos requisitos emite um alerta
+
+'Verifica se o campo opcional está preenchido
+If Len(QtdeMinimaCaracteres) <= 0 Then
+    
+    'Verifica se o campo não está vazio ou nulo
+    QtdeLinhas = DCount("[" & Campo & "]", NomeDaTabela, "[" & Campo & "] IS NOT NULL")
+    
+Else
+    'Verifica se o campo tem a qtde de caracteres informada ou mais
+    QtdeLinhas = DCount("[" & Campo & "]", NomeDaTabela, "LEN([" & Campo & "]) >=" & QtdeMinimaCaracteres & "")
+    
+End If
+    
+'Se a Qtde de linhas é igual a 0, nulo ou vazio tenta buscar os dados novamente
+'Se a qtde de linhas é menor que a qtde mínima de caracteres
+If QtdeLinhas = 0 Then
+    
+    'Envia um e-mail de alerta por e-mail informando que a tabela ñ tem dados
+    Call EnviaEmailBaseSemDados("", "", NomeDoArquivoAccess, NomeDaTabela, "", "")
+    
+Else
+    
+    'Se atende a todos os quesitos sai dessa função
+    Exit Function
+
+End If
+    
+End Function
+
+
+Public Sub EnviaEmailBaseSemDados(EmailRemetente As String, EmailsDestinatarios As String, NomeDoArquivoAccess As String, NomeDaTabela As String, Optional EmailsEmCopia, Optional EmailsEmCopiaOculta)
+'Email padrão para enviar o alerta de tabela/consulta vazia
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+
+' Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+' Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+' Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+AssuntoEmail = "Atenção | Base/Consulta Vazia " & NomeDaTabela & " | " & Date
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "" 'Informe o seu servidor de e-mail
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "" 'Informe o e-mail ou usuário
+    .Item(schema & "sendpassword") = "" 'Informe a senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = EmailRemetente 'Quem envia a mensagem
+    If IsEmpty(EmailsDestinatarios) = False And EmailsDestinatarios <> "" Then .To = EmailsDestinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    .Subject = AssuntoEmail ' Assunto ou título
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "<!DOCTYPE html>" & _
+                "<html>" & _
+                "<body>" & _
+                    "Olá, tudo bem? <br><br>" & _
+                    "A tabela/consulta do arquivo Access abaixo não tem dados, portanto pode ocorrer um erro.<br>" & _
+                    "Seguem os dados da automação: <br><br>" & _
+                    " » Nome do Arquivo: " & NomeDoArquivoAccess & "<br>" & _
+                    " » Pasta: " & CurrentProject.Path & "<br>" & _
+                    " » Tabela/Consulta: " & NomeDaTabela & "<br>" & _
+                    " » Data do erro: " & Format(Now, "dd/mm/yyyy") & "<br>" & _
+                    " » Horário do erro: " & Format(Now, "hh:mm:ss") & "<br><br>" & _
+                    "À disposição. <br>" & _
+                "</body>" & _
+            "</html>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
