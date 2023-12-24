@@ -1,0 +1,52 @@
+'Declara as variáveis globais
+Dim ListaEmailErros As String 'Função IdentificaEmailsComErro atribui valor a variável | Função RetornaEmailsComErro exibe esses valores
+Dim ListaIDClienteErros As String 'Função IdentificaEmailsComErro atribui valor a variável | Função RetornaEmailsComErro exibe esses valores
+
+Public Function IdentificaEmailsComErro(EmailCliente As String, IDCliente As String) As Boolean
+'Função que identifica erros nos e-mails cadastrados pelos clientes
+'Essa função atribui as variáveis globais a lista com a identificação do cliente/usuário e o e-mail que contém um erro
+'A estrutura das duas variáveis formam uma tabela que pode ser enviada no corpo do e-mail
+'Atribui o valor das variáveis no corpo do seu email
+
+'Declara as variáveis
+Dim ListaErros
+Dim EmailComErro As Boolean
+
+'Se a variável Email não está vazia entra nessa condição
+If IsEmpty(EmailCliente) = False And EmailCliente <> "" Then
+       
+    EmailComErro = False
+    'Lista que recebe os possíveis erros nos e-mails | Sempre que identificar um novo erro inclua nessa lista
+    ListaErros = Array(",", ".vê", ".@")
+    
+    'Itera sobre a lista dos erros
+    For Each Erro In ListaErros
+        'Se localizar algum erro retorna true e sai do laço
+        If InStr(EmailCliente, Erro) > 0 Then EmailComErro = True: Exit For
+    Next
+    
+    'Se a variável erro recebe verdadeiro
+    If EmailComErro = True Then
+        'Atribui as váriáveis GLOBAIS os dados de linha a linha e inclui uma tag <br> para pular linha
+        ListaIDClienteErros = IDCliente & "<br>" & ListaIDClienteErros
+        ListaEmailErros = EmailCliente & "<br>" & ListaEmailErros
+        'A função retorna verdadeiro
+        IdentificaEmailsComErro = True
+        'Sai da função
+        Exit Function
+    Else
+        'A função retorna false | Significa que ñ tem erros
+        IdentificaEmailsComErro = False
+        'Sai da função
+        Exit Function
+    End If
+    
+Else
+
+    'A função retorna verdadeiro | Significa que a variável Email está vazia
+    IdentificaEmailsComErro = True
+    'Sai da função
+    Exit Function
+End If
+    
+End Function
