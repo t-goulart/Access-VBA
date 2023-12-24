@@ -1,0 +1,542 @@
+Option Compare Database
+
+'Declara variáveis públicas globais
+Public IdAutomacao As Integer
+Public CaminhoRede As String
+Public CaminhoLocal As String
+Public ArquivoAnexo As String
+Public Destinatarios As String
+Public NomeDoCliente As String
+Public NomeDaAutomacao As String
+Public Peridiocidade As String
+Public InicioDoProcessamento  'Variável para mensurar o tempo de processamento
+Public DataInicioDoProcessamento 'Variável para mensurar o tempo de processamento
+Public MensagemArquivoAcimaDoTamanhoLimite As String
+Public Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As LongPtr) ' Método de tempo de espera Sleep
+
+
+
+Public Function RotinaPrincipal()
+
+'Declara variáveis locais
+Dim Sufixo As String
+Dim NomeArquivo As String
+Dim NomeAtendente As String
+Dim rstBase As DAO.Recordset
+Dim rstListaOperador As DAO.Recordset
+
+
+
+'_____________________________ CAPTURA O PROCESSAMENTO DA AUTOMAÇÃO _____________________________
+C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.InicioDoProcessamento = Timer
+C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.DataInicioDoProcessamento = Now
+C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.NomeDoCliente = "Porto Seguro"
+C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.NomeDaAutomacao = "C6Bank_Registro_EmailFilaTrabalhoOperacao"
+C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.Peridiocidade = "Diaria"
+C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.IdAutomacao = Mdl_Registro.ValidaIdAutomacao(NomeDaAutomacao)
+
+
+
+'Ativa (True) ou Desativa (False) avisos padrão do Access
+DoCmd.SetWarnings False
+
+
+
+'_____________________________ TESTA CONEXÃO COM A BASE NO ORACLE _____________________________
+'Se a base do Oracle não tem informações envia um e-mail e encerra a aplicação
+Call C6Bank_Registro_EmailFilaTrabalhoOperacao.Mdl_Conexao.TestaServidor("PDIMOB_R_C6BANK_REGISTRO_FILATRABALHO_OPERACAO", "PROCESSOID", NomeDoCliente, NomeDaAutomacao, Peridiocidade, DataInicioDoProcessamento)
+
+
+
+'Tratamento de erro
+On Error GoTo TratarErro
+
+
+
+'_____________________________ PRÉ-ROTINA PRINCIPAL _____________________________
+DoCmd.OpenTable "PDIMOB_R_C6BANK_REGISTRO_FILATRABALHO_OPERACAO", acViewNormal, acReadOnly 'Abre a tabela principal para atualizar seus dados
+C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.Sleep (5000) '_____ Aguarda 5 segundos antes de continuar
+DoCmd.Close acTable, "PDIMOB_R_C6BANK_REGISTRO_FILATRABALHO_OPERACAO", acSaveYes 'Fecha a tabela atualizando a conexão com a rede
+
+DoCmd.OpenQuery "001_CONSULTA", acViewNormal, acReadOnly 'Executa a consulta SQL para atualizar seus dados | Observação: Ao abrir a consulta seus dados são atualizados automaticamente
+C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.Sleep (5000) '_____ Aguarda 5 segundos antes de continuar
+DoCmd.Close acQuery, "001_CONSULTA", acSaveYes 'Fecha a consulta salvando e atualizando
+
+
+
+'_____________________________ ATRIBUI VALOR AS VARIÁVEIS _____________________________
+C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.CaminhoRede = "\\fsapps\Shares2\Relatorios-MIS\C6Bank_Registro_EmailFilaTrabalhoOperacao\"
+C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.CaminhoLocal = CurrentProject.Path & "\"
+Sufixo = Format(Now, "yyyymmdd")
+ArquivoAnexo = ""
+NomeArquivo = ""
+
+
+
+'_____________________________ GERENCIAMENTO DA PASTA NA REDE _____________________________
+'Testa se tem acesso a rede
+Call C6Bank_Registro_EmailFilaTrabalhoOperacao.Mdl_Conexao.TestaAcessoDaRede(C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.CaminhoRede, NomeDoCliente, NomeDaAutomacao, Peridiocidade, DataInicioDoProcessamento)
+
+'Gerencia as pastas apagando o histórico que for superio a qtde de dias informados
+Call C6Bank_Registro_EmailFilaTrabalhoOperacao.Mdl_Conexao.GerenciaPastasEArquivos(C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.CaminhoRede, 365)
+
+'Local onde os relatórios são salvos | Novo caminho da rede
+C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.CaminhoRede = Mdl_Funcoes.CriaPastaDestino(C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.CaminhoRede)
+
+
+
+'_____________________________ EXPORTA ARQUIVO _____________________________
+'Atribui a variável a base/consulta que possui os dados que vamos enviar por e-mail
+Set rstBase = CurrentDb.OpenRecordset("001_CONSULTA")
+
+'Verifica se tem dados na base/consulta
+If rstBase.EOF = False Then
+
+    'Itera sobre cada um dos operadores que devem receber sua fila de trabalho
+    Do While rstBase.EOF = False
+        
+        'Atribui a variavel o nome do atendente removendo o ponto
+        NomeAtendente = StrConv(Replace(rstBase("OPERADOR"), ".", " "), vbProperCase)
+        
+        'Atribui a variável o nome do responsável pelo atendimento com o sufixo do e-mail da PDtec
+        Destinatarios = rstBase("OPERADOR") & "@pd.tec.br"
+    
+        'Chama a sub rotina | Cria uma consulta que contém apenas o que é correspondente ao operador
+        Call C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.Consulta(rstBase("OPERADOR"))
+    
+        'Cria o nome que será atribuido ao arquivo
+        NomeArquivo = "C6bank_registro_fila_trabalho_operacao_" & NomeAtendente & "_" & Format(Now, "hh") & "h_" & Sufixo & ".xlsx"
+    
+        'Se o arquivo já existe será removido dando lugar a versão atualizada
+        Call C6Bank_Registro_EmailFilaTrabalhoOperacao.Mdl_Funcoes.RemoveArquivoExistente(CaminhoRede, NomeArquivo)
+    
+        'Chama a sub rotina | Atualiza dados de um arquivo existente
+        Call C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.ExportaTabelasArquivoExcel("002_CONSULTA", CaminhoRede, NomeArquivo, "BASE", "C6Bank_Registro_EmailFilaTrabalhoOperacao.xlsx")
+        
+        'Chama a sub rotina | Edita células específicas de uma coluna que contenham uma palavra específica
+        Call C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.EditaTabelasArquivoExcel(CaminhoRede, "BASE", NomeArquivo, 5, "REENTRADA CARTORIO")
+        
+        'Aguarda 5 segundos antes de ir para a próxima etapa
+        C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.Sleep (5000)
+                
+                                                     
+        '__________________________ ENVIO DO EMAIL __________________________
+        'Se o tamanho do anexo é inferior a 10 megabytes envia o e-mail
+        If C6Bank_Registro_EmailFilaTrabalhoOperacao.Mdl_Funcoes.TamanhoDoArquivo(ArquivoAnexo) < 10240 Then
+            
+            'Atribui o anexo ao array
+            Anexos = Array(ArquivoAnexo)
+            'Envia o email com base na tabela de Emails localizada na pasta E:\PDTec_Automacoes_Monitoramento
+            Call C6Bank_Registro_EmailFilaTrabalhoOperacao.EnviaEmail("C6 Bank | Fila de trabalho - Operação - " & NomeAtendente & " | " & Date, Anexos)
+        
+        Else
+            
+            'Atribui a variável a mensagem adicional informando que o arquivo tem mais de 10MB e por isso não foi enviado
+            C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.MensagemArquivoAcimaDoTamanhoLimite = "O arquivo não foi enviado como anexo, pois ultrapassou o tamanho limite permitido pelo servidor. <br>Consulte o arquivo no link indicado no email. <br>"
+            'Envia o email com base na tabela de Emails localizada na pasta E:\PDTec_Automacoes_Monitoramento
+            Call C6Bank_Registro_EmailFilaTrabalhoOperacao.EnviaEmail("C6 Bank | Fila de trabalho - Operação - " & NomeAtendente & " | " & Date)
+            
+        End If
+    
+    
+    
+        '__________________________ EXCLUSÃO DA CONSULTA __________________________
+        CurrentDb.QueryDefs.Delete "002_CONSULTA"
+    
+    
+    
+        'Vai para o próximo operador (Atendente)
+        rstBase.MoveNext
+    Loop
+    
+Else
+
+    'Envia um e-mail de alerta caso não tenha dados na consulta usada como base para fazer o(s) processo(s) da automação
+    Call C6Bank_Registro_EmailFilaTrabalhoOperacao.Mdl_Emails.EnviaEmailBaseSemDados("relatorios@pd.tec.br", "fabiola.leitao@pd.tec.br;ingrit.lopes@pd.tec.br;monica.chaves@pd.tec.br;raquel.farias@pd.tec.br;tatiane.vivas@pd.tec.br;tiago.goulart@pd.tec.br;tiago.macedo@pd.tec.br", NomeDoCliente, NomeDaAutomacao, "001_CONSULTA")
+
+    'Encerra o access
+    DoCmd.Quit
+
+End If
+
+       
+       
+'_____________________________ LIMPA VARIÁVEIS _____________________________
+Set rstBase = Nothing
+
+
+
+'_____________________________  REGISTRO DO PROCESSAMENTO DA AUTOMAÇÃO _____________________________
+'Envia um e-amail com o tempo de processamento
+'Call C6Bank_Registro_EmailFilaTrabalhoOperacao.Mdl_Emails.EnviaEmailTempoProcessamento("monitoramento.automacao@pd.tec.br", "tiago.goulart@pd.tec.br", NomeDoCliente, NomeDaAutomacao, Peridiocidade, InicioDoProcessamento, DataInicioDoProcessamento)
+'Salva na tabela MONITORAMENTO_AUTOMACOES (ASSINADOR 2.0) os dados do processamento dessa automação
+'Call C6Bank_Registro_EmailFilaTrabalhoOperacao.Mdl_Registro.RegistraTempoProcessamentoOracle("PRDBI_MONITORAMENTO_AUTOMACOES", NomeDoCliente, IdAutomacao, NomeDaAutomacao, Peridiocidade, DataInicioDoProcessamento, Now)
+
+
+
+'Ativa (True) ou Desativa (False) avisos padrão do Access
+DoCmd.SetWarnings True
+
+
+
+'_____________________________  ENCERRA O ACCESS _____________________________
+DoCmd.Quit
+
+
+
+'_____________________________  TRATAMENTO E REGISTRO DE ERRO _____________________________
+TratarErro:
+    Debug.Print Err.Number
+    Debug.Print Err.Description
+    If Err.Number > 0 Then
+        Call C6Bank_Registro_EmailFilaTrabalhoOperacao.Mdl_Emails.EnviaEmailErro("erro.automacao@pd.tec.br", "fabiola.leitao@pd.tec.br;ingrit.lopes@pd.tec.br;monica.chaves@pd.tec.br;raquel.farias@pd.tec.br;tatiane.vivas@pd.tec.br;tiago.goulart@pd.tec.br;tiago.macedo@pd.tec.br", NomeDoCliente, NomeDaAutomacao, Peridiocidade, Err.Number, Err.Description, DataInicioDoProcessamento)
+    End If
+
+End Function
+
+
+
+Public Sub Consulta(NomeOperador As String)
+
+'Declaração das variáveis locais
+Dim rstConsulta As QueryDef
+Dim ConsultaDadosParaRelatorio As String
+
+
+
+'Atribui a variável os dados que serão utilizados para preencher o relatório
+ ConsultaDadosParaRelatorio = "SELECT * FROM PDIMOB_R_C6BANK_REGISTRO_FILATRABALHO_OPERACAO WHERE RESP_ATENDIMENTO = '" & NomeOperador & "' ORDER BY FLAGFOLLOW DESC;"
+        
+'Cria uma nova consulta e atribui a variável
+Set rstConsulta = CurrentDb.CreateQueryDef("002_CONSULTA")
+
+'Atribui a consulta que foi criada vazia a query com os dados
+rstConsulta.SQL = ConsultaDadosParaRelatorio
+
+'Executa a consulta SQL para atualizar seus dados
+'Observação: Ao abrir a consulta seus dados são atualizados automaticamente
+DoCmd.OpenQuery "002_CONSULTA", acViewNormal, acReadOnly
+
+'_____ Aguarda 3 segundos antes de continuar
+C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.Sleep (3000)
+
+'Fecha a consulta salvando e atualizando
+DoCmd.Close acQuery, "002_CONSULTA", acSaveYes
+
+End Sub
+
+
+
+Public Function ExportaTabelasArquivoExcel(NomeDaConsulta As Variant, CaminhoRede As String, NomeArquivo As String, NomeAbaArquivo As String, NomeArquivoBase As String)
+
+'Declara variáveis locais
+Dim CaminhoLocal As String
+Dim rstDados As DAO.Recordset
+Dim Excel_WB As Excel.Workbook
+Dim Excel_WS As Excel.Worksheet
+Dim qdfConsulta As DAO.QueryDef
+Dim Coluna As Integer
+Dim QtdeLinhasDaTabela As Integer
+Dim QtdeColunasDaTabela As Integer
+Dim Excel_App As New Excel.Application
+
+
+
+'_____________________________ ATRIBUI VALOR AS VARIÁVEIS _____________________________
+Coluna = 1
+CaminhoLocal = CurrentProject.Path & "\"
+Set qdfConsulta = CurrentDb.QueryDefs(NomeDaConsulta) 'Atribui a variável a consulta
+Set rstDados = qdfConsulta.OpenRecordset() 'Atribui a variável o resultado da consulta
+
+
+
+'_____________________________ ROTINA PRINCIPAL _____________________________
+'Exibe o arquivo
+Excel_App.Visible = True
+
+'Ativa/Desativa os alertas
+Excel_App.EnableEvents = False
+
+'Abre o arquivo para atualizar seus dados
+Set Excel_WB = Excel_App.Workbooks.Open(CaminhoLocal & NomeArquivoBase)
+
+'Atribui a aba para o arquivo focar nela
+Set Excel_WS = Excel_WB.Sheets(NomeAbaArquivo)
+
+'Foca para a aba selecionada
+Excel_WS.Select
+
+'Apaga todas as informações da aba se tem dados na célula A2
+If IsEmpty(Excel_WS.Range("A2").Value) = False Then
+
+    'Atribui a variável a qtde de linhas preenchidas na aba
+    QtdeLinhasDaTabela = Excel_WS.Range("A1000000").End(xlUp).Row
+    
+    'Atribui a variável a qtde de colunas preenchidas na aba
+    QtdeColunasDaTabela = Excel_WS.Range("A2").End(xlToRight).Column
+    
+    'Apaga o espaço identificado como preenchido
+    Excel_WS.Range(Excel_WS.Cells(2, 1), Excel_WS.Cells(QtdeLinhasDaTabela, QtdeColunasDaTabela)).Delete
+
+End If
+
+'Copia os dados da consulta (ACCESS) para a aba informada (EXCEL)
+Excel_WS.Range("A2").CopyFromRecordset rstDados
+
+'Seleciona todas as células da aba ativa
+Excel_WS.Cells.Select
+  
+'Ajusta a largura das colunas para o tamanho do conteúdo
+Excel_WS.Cells.EntireColumn.AutoFit
+    
+'Ajusta a altura das linhas para o tamanho do conteúdo
+Excel_WS.Cells.EntireRow.AutoFit
+
+'Renomeia a aba antes de salvar como uma cópia
+Excel_WS.Name = NomeAbaArquivo
+
+'Seleciona a primeira célula da aba
+Excel_WS.Range("A1").Select
+
+'Atualiza tudo
+Excel_WB.RefreshAll
+
+
+
+'_____________________________  CRIA UMA CÓPIA NA REDE _____________________________
+'Cria o link do arquivo que será anexo ao e-mail
+ArquivoAnexo = CaminhoRede & Replace(NomeArquivo, "/", "")
+
+'Cria uma cópia do arquivo na rede com o nome especificado
+Excel_WB.SaveAs ArquivoAnexo, xlOpenXMLWorkbook
+
+
+
+'_____________________________  ENCERRA O PROCESSO _____________________________
+'Fecha a consulta
+rstDados.Close
+
+'Salva o arquivo
+Excel_WB.Save
+
+'Fecha o arquivo
+Excel_WB.Close
+
+'Ativa/Desativa os alertas
+Excel_App.EnableEvents = True
+
+'Exibe o arquivo
+Excel_App.Visible = False
+
+
+
+'_____________________________  ENCERRA O EXCEL _____________________________
+Excel_App.Quit
+
+
+
+'_____________________________  LIMPA AS VARIÁVEIS _____________________________
+Set Excel_WB = Nothing
+Set rstDados = Nothing
+Set Excel_App = Nothing
+Set qdfConsulta = Nothing
+Set NomeDaColuna = Nothing
+Set TituloDaColuna = Nothing
+       
+End Function
+
+
+
+Public Sub EditaTabelasArquivoExcel(CaminhoRede As String, NomeAbaArquivo As String, NomeArquivo As String, Coluna As Integer, PalavraChave As String)
+'Faz a edição visual das células de uma tabela
+
+'Declara variáveis locais
+Dim rng As Range
+Dim Celula As Range
+
+ 
+Dim Excel_WB As Excel.Workbook
+Dim Excel_WS As Excel.Worksheet
+Dim QtdeLinhasDaTabela As Integer
+Dim Excel_App As New Excel.Application
+
+
+
+'_____________________________ ROTINA PRINCIPAL _____________________________
+'Exibe o arquivo
+Excel_App.Visible = True
+
+'Ativa/Desativa os alertas
+Excel_App.EnableEvents = False
+
+'Abre o arquivo para atualizar seus dados
+Set Excel_WB = Excel_App.Workbooks.Open(CaminhoRede & NomeArquivo)
+
+'Atribui a aba para o arquivo focar nela
+Set Excel_WS = Excel_WB.Sheets(NomeAbaArquivo)
+
+'Foca para a aba selecionada
+Excel_WS.Select
+
+'Apaga todas as informações da aba se tem dados na célula A2
+If IsEmpty(Excel_WS.Cells(2, Coluna).Value) = False Then
+
+    'Itera sobre cara uma das células do range informado
+    For Each Celula In Excel_WS.Range(Excel_WS.Cells(2, Coluna), Excel_WS.Cells(Excel_WS.Rows.Count, Coluna).End(xlUp))
+    
+        'Verifica se o conteúdo da célula contém a palavra-chave
+        If InStr(1, Celula.Value, PalavraChave, vbTextCompare) > 0 Then
+        
+            Celula.Font.Color = RGB(139, 0, 0)  ' Vermelho Escuro
+            Celula.Interior.Color = RGB(255, 192, 203) ' Rosa Claro
+
+        End If
+        
+    'Vai para a próxima célula
+    Next Celula
+
+End If
+
+'Seleciona todas as células da aba ativa
+Excel_WS.Cells.Select
+  
+'Ajusta a largura das colunas para o tamanho do conteúdo
+Excel_WS.Cells.EntireColumn.AutoFit
+    
+'Ajusta a altura das linhas para o tamanho do conteúdo
+Excel_WS.Cells.EntireRow.AutoFit
+
+'Renomeia a aba antes de salvar como uma cópia
+Excel_WS.Name = NomeAbaArquivo
+
+'Seleciona a primeira célula da aba
+Excel_WS.Range("A1").Select
+
+'Atualiza tudo
+Excel_WB.RefreshAll
+
+
+
+'_____________________________  ENCERRA O PROCESSO _____________________________
+'Salva o arquivo
+Excel_WB.Save
+
+'Fecha o arquivo
+Excel_WB.Close
+
+'Ativa/Desativa os alertas
+Excel_App.EnableEvents = True
+
+'Exibe o arquivo
+Excel_App.Visible = False
+
+
+
+'_____________________________  ENCERRA O EXCEL _____________________________
+Excel_App.Quit
+
+
+
+'_____________________________  LIMPA AS VARIÁVEIS _____________________________
+Set Excel_WB = Nothing
+Set Excel_App = Nothing
+
+End Sub
+
+
+
+Public Sub EnviaEmail(AssuntoEmail As Variant, Optional Anexo = "")
+'_____ Envia um e-mail com base nos parâmetros passados
+
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim AssuntoEmail As Variant
+Dim EmailsEmCopia As String
+Dim EmailRemetente As String
+Dim EmailsDestinatarios As String
+Dim EmailsEmCopiaOculta As String
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+
+'Atribui as variáveis os e-mails correspondentes | Todos os e-mails estão em um arquivo na pasta E:\PDTec_Automacoes_Monitoramento
+EmailRemetente = C6Bank_Registro_EmailFilaTrabalhoOperacao.Mdl_Emails.RetornaEmails("BASE_EMAILS", "EMAIL", "AUTOMACAO", Rotina.NomeDaAutomacao, "FROM")
+EmailsDestinatarios = C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.Destinatarios
+EmailsEmCopia = C6Bank_Registro_EmailFilaTrabalhoOperacao.Mdl_Emails.RetornaEmails("BASE_EMAILS", "EMAIL", "AUTOMACAO", Rotina.NomeDaAutomacao, "CO")
+EmailsEmCopiaOculta = C6Bank_Registro_EmailFilaTrabalhoOperacao.Mdl_Emails.RetornaEmails("BASE_EMAILS", "EMAIL", "AUTOMACAO", Rotina.NomeDaAutomacao, "BCC")
+
+Debug.Print EmailRemetente
+Debug.Print EmailsDestinatarios
+Debug.Print EmailsEmCopia
+Debug.Print EmailsEmCopiaOculta
+
+EmailsDestinatarios = "tiago.goulart@pd.tec.br"
+EmailsEmCopia = "tiago.goulart@pd.tec.br"
+EmailsEmCopiaOculta = "tiago.goulart@pd.tec.br"
+
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = EmailRemetente 'Quem envia a mensagem
+    If IsEmpty(EmailsDestinatarios) = False And EmailsDestinatarios <> "" Then .To = EmailsDestinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    
+    If IsArray(Anexo) Then
+        'Expande a lista de anexos para retornar um a um e incluir no envio
+        For Indice = LBound(Anexo) To UBound(Anexo)
+            'Caminho do arquivo + nome do arquivo que será anexado
+            If IsEmpty(Anexo(Indice)) = False And Anexo(Indice) <> "" Then .AddAttachment (Anexo(Indice))
+        Next Indice
+    End If
+    
+    .Subject = "" & AssuntoEmail & ""
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem? <br><br>" & _
+                "Segue fila de trabalho para atuação nesta data. <br>" & _
+                "Solicitamos que seja priorizado os casos vencidos, caso haja. <br><br>" & _
+                "O histórico com os demais arquivos está disponível em: <br>" & _
+                "<a href='" & C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.CaminhoRede & "'>" & C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.CaminhoRede & "</a>" & _
+                "<br><br>" & _
+                "" & C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.MensagemArquivoAcimaDoTamanhoLimite & "" & _
+                "<br>" & _
+                "Em caso de dúvidas, favor entrar em contato com nosso Planejamento Estratégico." & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+
+
+'_____________________________  REGISTRA O ENVIO DO E-MAIL _____________________________
+Call Mdl_Registro.RegistraEnvioEmail(Rotina.IdAutomacao, Rotina.NomeDaAutomacao, Rotina.NomeDoCliente, "Interno", EmailRemetente, EmailsDestinatarios, EmailsEmCopia, EmailsEmCopiaOculta, AssuntoEmail)
+
+End Sub
