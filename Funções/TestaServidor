@@ -1,0 +1,23 @@
+Public Function TestaServidor(Tabela As String, Campo As String) As Boolean
+'Função para testar se tem conexão com a tabela específica | Consequentemente vaiidentificar se tem conexão com o servidor
+
+'Declara as variáveis
+Dim ConexaoTabelas As Variant
+
+'Procura na tabela se o campo informado tem informação
+ConexaoTabelas = DLookup(Campo, Tabela)
+
+'Se o campo for nulo
+If IsNull(ConexaoTabelas) = True Then
+    
+	'Retorna false se não conseguiu estabelecer a conexão
+	TestaServidor = False
+
+Else
+
+	'Retorna true se não conseguiu estabelecer a conexão
+	TestaServidor = True  
+ 
+End If
+
+End Function
