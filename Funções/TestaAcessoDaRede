@@ -1,0 +1,14 @@
+Public Function TestaAcessoDaRede(Caminho As String)  As Boolean
+'Testa se tem acesso a rede
+
+If Dir(Caminho, vbDirectory) = vbNullString Then
+
+  'Retorna false se não conseguiu acessa a pasta específica
+  TestaAcessoDaRede = False
+
+Else
+
+  'Retorna true se conseguiu acessa a pasta específica
+  TestaAcessoDaRede = True  
+
+End If
