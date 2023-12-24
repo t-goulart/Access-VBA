@@ -1,0 +1,14 @@
+Public Function CriaPastaDestino(CaminhoOrigem As String)
+'Essa função cria pastas em um local especifico | Retorna o endereço com o novo caminho
+
+'Se a pasta dentro do caminho + ano não existe cria a pasta
+If Dir(CaminhoOrigem & Format(Date, "yyyy"), vbDirectory) = vbNullString Then MkDir (CaminhoOrigem & Format(Date, "yyyy"))
+
+'Se a pasta dentro do caminho + ano + ano e mês não existe cria a pasta
+If Dir(CaminhoOrigem & Format(Date, "yyyy") & "\" & Format(Date, "yyyymm"), vbDirectory) = vbNullString Then MkDir (CaminhoOrigem & Format(Date, "yyyy") & "\" & Format(Date, "yyyymm"))
+
+'A variável do caminho recebe o caminho atualizado com o ano/ano e mês
+CriaPastaDestino = CaminhoOrigem & Format(Date, "yyyy") & "\" & Format(Date, "yyyymm") & "\"
+
+
+End Function
