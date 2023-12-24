@@ -1,0 +1,21 @@
+Public Sub RemoverPalavra(RemoveEssaPalavra As String, RemoveDessaTabela As Variant, RemoveComBaseNessaColuna As Variant)
+'_____ Remove uma palavra específica de todas as linhas de um tabela específica
+
+'Salva na variável a consulta dos dados da tabela com as filas
+Set rstTabela = CurrentDb.OpenRecordset("SELECT " & RemoveComBaseNessaColuna & " FROM " & RemoveDessaTabela & "")
+
+'Faça enquanto não chagar no ultimo valor da tabela
+Do While rstTabela.EOF = False
+
+    'Se a palavra Página for inserida na tabela exclui a linha _
+        Esse problema ocorre no Excel, dificilmente no Access, mas como prevenção vamos remover
+    If InStr(rstTabela(RemoveComBaseNessaColuna).Value, RemoveEssaPalavra) > 0 Then
+        'Exclui a linha que tem a palavra
+        rstTabela.Delete
+    End If
+    
+    'Vai para a próxima linha da tabela
+    rstTabela.MoveNext
+Loop
+
+End Sub
