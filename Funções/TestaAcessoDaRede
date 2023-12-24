@@ -12,3 +12,5 @@ Else
   TestaAcessoDaRede = True  
 
 End If
+
+End Function
