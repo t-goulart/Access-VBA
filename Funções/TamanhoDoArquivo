@@ -1,0 +1,18 @@
+Public Function TamanhoDoArquivo(NomeDoArquivo As String)
+'Função que identifica o tamanho de um arquivo com base na sua localização (Pasta) e nome do arquivo
+'Use essa função para validar o tamanho do arquivo que está sendo enviado por anexo e evitar problemas com o servidor
+
+'Declara as variáveis locais
+Dim FSO As Object
+Dim Tamanho As Object
+
+'Atribui a variável as propriedades do FileSystem
+Set FSO = CreateObject("Scripting.FileSystemObject")
+
+'Atribui a variável as propriedades do FileSistemObjects
+Set Tamanho = FSO.GetFile(NomeDoArquivo)
+
+'Retorna o tamanho do arquivo | Divide por 1000 para retorna o tamanho em KB | Round é usado para ñ retornar casas decimais
+TamanhoDoArquivo = Round(Tamanho.Size / 1000)
+
+End Function
