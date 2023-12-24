@@ -6192,3 +6192,1335 @@ Set rstConsultaAlertas = Nothing
 'Call Mdl_Registro.RegistraTempoProcessamentoOracle("PRDBI_MONITORAMENTO_AUTOMACOES", NomeDoCliente, IdAutomacao, NomeDaAutomacao, Peridiocidade, DataInicioDoProcessamento, Now)
 
 End Function
+
+
+
+
+
+
+Option Compare Database
+
+'Declara as variáveis globais
+Public ArquivoAnexo As String
+
+
+
+Public Function ExportaTabelasArquivoExcel(NomeDaConsulta As Variant, CaminhoRede As String, NomeArquivo As String, NomeAbaArquivo As String)
+
+'Declara variáveis locais
+Dim Sufixo As String
+Dim CaminhoLocal As String
+Dim NomeArquivoBase As String
+Dim NomeNovoArquivo As String
+Dim rstDados As DAO.Recordset
+Dim Excel_WB As excel.Workbook
+Dim Excel_WS As excel.Worksheet
+Dim qdfConsulta As DAO.QueryDef
+Dim coluna As Integer
+Dim QtdeLinhasDaTabela As Integer
+Dim QtdeColunasDaTabela As Integer
+Dim Excel_App As New excel.Application
+
+
+
+'_____________________________ ATRIBUI VALOR AS VARIÁVEIS _____________________________
+coluna = 1
+Sufixo = Format(Date, "yyyymmdd")
+CaminhoLocal = CurrentProject.Path & "\"
+NomeArquivoBase = "PDtec_MIS_EnvioAlertas.xlsx"
+NomeNovoArquivo = NomeArquivo & "_" & Sufixo & ".xlsx"
+Set qdfConsulta = CurrentDb.QueryDefs(NomeDaConsulta) 'Atribui a variável a consulta
+Set rstDados = qdfConsulta.OpenRecordset() 'Atribui a variável o resultado da consulta
+
+
+
+'_____________________________ ROTINA PRINCIPAL _____________________________
+'Exibe o arquivo
+Excel_App.Visible = True
+
+'Ativa/Desativa os alertas
+Excel_App.EnableEvents = False
+
+'Abre o arquivo para atualizar seus dados
+Set Excel_WB = Excel_App.Workbooks.Open(CaminhoLocal & NomeArquivoBase)
+
+'Atribui a aba para o arquivo focar nela
+Set Excel_WS = Excel_WB.Sheets("NOME_ABA")
+
+'Foca para a aba selecionada
+Excel_WS.Select
+
+'Limpa a aba inteira excluindo dados e títulos
+Excel_WS.Cells.ClearContents
+
+'Itera sobre as colunas da consulta e insere no arquivo EXCEL
+For Each TituloColuna In rstDados.Fields
+
+    'Na primeira linha de cada coluna insere o título da coluna da consulta
+    'Remove espaços vazios e a virgula (Vem como separador padrão)
+    Excel_WS.Cells(1, coluna).Value = Trim(Replace(TituloColuna.Name, ",", ""))
+
+    'A cada nova iteração inclui mais um para focar na próxima coluna
+    coluna = coluna + 1
+
+Next TituloColuna
+
+'Copia os dados da consulta (ACCESS) para a aba informada (EXCEL)
+Excel_WS.Range("A2").CopyFromRecordset rstDados
+
+'Seleciona todas as células da aba ativa
+Excel_WS.Cells.Select
+  
+'Ajusta a largura das colunas para o tamanho do conteúdo
+Excel_WS.Cells.EntireColumn.AutoFit
+    
+'Ajusta a altura das linhas para o tamanho do conteúdo
+Excel_WS.Cells.EntireRow.AutoFit
+
+'Renomeia a aba antes de salvar como uma cópia
+Excel_WS.Name = NomeAbaArquivo
+
+'Seleciona a primeira célula da aba
+Excel_WS.Range("A1").Select
+
+'Atualiza tudo
+Excel_WB.RefreshAll
+
+
+
+'_____________________________  CRIA UMA CÓPIA NA REDE _____________________________
+'Se o arquivo já existe será removido dando lugar a versão atualizada
+Call PDtec_MIS_EnvioAlertas.Mdl_Funcoes.RemoveArquivoExistente(CaminhoRede, NomeNovoArquivo)
+
+'Cria o link do arquivo que será anexo ao e-mail
+ArquivoAnexo = CaminhoRede & Replace(NomeNovoArquivo, "/", "")
+
+'Cria uma cópia do arquivo na rede com o nome especificado
+Excel_WB.SaveAs ArquivoAnexo, xlOpenXMLWorkbook
+
+
+
+'_____________________________  ENCERRA O PROCESSO _____________________________
+'Fecha a consulta
+rstDados.Close
+
+'Salva o arquivo
+Excel_WB.Save
+
+'Fecha o arquivo
+Excel_WB.Close
+
+'Ativa/Desativa os alertas
+Excel_App.EnableEvents = True
+
+'Exibe o arquivo
+Excel_App.Visible = False
+
+
+
+'_____________________________  ENCERRA O EXCEL _____________________________
+Excel_App.Quit
+
+
+
+'_____________________________  LIMPA AS VARIÁVEIS _____________________________
+Set Excel_WB = Nothing
+Set rstDados = Nothing
+Set Excel_App = Nothing
+Set qdfConsulta = Nothing
+Set NomeDaColuna = Nothing
+Set TituloDaColuna = Nothing
+       
+End Function
+
+
+
+Public Sub EnviaEmailInconsistencias(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?<br><br>" & _
+                "" & CorpoDoEmail & "" & _
+                "<br><br>" & _
+                    "" & Rotina.strHTMLTabela & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+
+Public Sub EnviaEmailSLA(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?<br><br>" & _
+                "" & CorpoDoEmail & "" & _
+                "<br><br>" & _
+                    "" & Rotina.strHTMLTabela & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+
+Public Sub EnviaEmailNaoAcionados(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?<br><br>" & _
+                "" & CorpoDoEmail & "" & _
+                "<br><br>" & _
+                    "" & Rotina.strHTMLTabela & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+
+Public Sub EnviaEmailBaseNaoRecebida(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?<br><br>" & _
+                "" & CorpoDoEmail & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+
+Public Sub EnviaEmailBaseNaoProcessada(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?<br><br>" & _
+                "" & CorpoDoEmail & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+
+Public Sub EnviaEmailProtestoIrregularidade(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?<br><br>" & _
+                "" & CorpoDoEmail & "" & _
+                "<br><br>" & _
+                    "" & Rotina.strHTMLTabela & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+
+Public Sub EnviaEmailForecast(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?<br><br>" & _
+                "" & CorpoDoEmail & "" & _
+                "<br><br>" & _
+                    "" & Rotina.strHTMLTabela & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+
+Public Sub EnviaEmailFollowPD(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?<br><br>" & _
+                "" & CorpoDoEmail & "" & _
+                "<br><br>" & _
+                    "" & Rotina.strHTMLTabela & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+
+
+Public Sub EnviaEmailDuplicidade(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?<br><br>" & _
+                "" & CorpoDoEmail & "" & _
+                "<br><br>" & _
+                "" & Rotina.strHTMLTabela & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+Public Sub EnviaEmailEmCQMaiorDoisDia(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?<br><br>" & _
+                "" & CorpoDoEmail & "" & _
+                "<br><br>" & _
+                "<table border='1' bordercolor=black>" & _
+                    "<thead border='1' bordercolor=black style='background-color:rgb(31, 78, 120); color:#ffffff'>" & _
+                        "" & PDtec_MIS_EnvioAlertas.Rotina.EmCQMaiorDoisDiasLinhaDoTitulo & "" & _
+                    "</thead>" & _
+                    "<tbody>" & _
+                        "" & PDtec_MIS_EnvioAlertas.Rotina.EmCQMaiorDoisDiasColunasDaTabela & "" & _
+                    "</tbody>" & _
+                "</table>" & _
+                "<br><br>" & _
+                    "" & Rotina.strHTMLTabela & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+
+
+Public Sub EnviaEmailNotificacaoVolume(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?<br><br>" & _
+                "" & CorpoDoEmail & "" & _
+                "<br><br>" & _
+                    "" & Rotina.strHTMLTabela & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+
+
+Public Sub EnviaEmailAnaliseQuinzenal(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?<br><br>" & _
+                "" & CorpoDoEmail & "" & _
+                "" & Rotina.strHTMLTabela & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+
+
+Public Sub EnviaEmailNotificacaoDuplicidade(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?<br><br>" & _
+                "" & CorpoDoEmail & "" & _
+                "<br><br>" & _
+                    "" & Rotina.strHTMLTabela & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+
+Public Sub EnviaEmailNotificacaoEstoque(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?<br><br>" & _
+                "" & CorpoDoEmail & "" & _
+                "<br><br>" & _
+                    "" & Rotina.strHTMLTabela & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+
+Public Sub EnviaEmailNotificacaoPostagem(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?<br><br>" & _
+                "" & CorpoDoEmail & "" & _
+                "<br><br>" & _
+                    "" & Rotina.strHTMLTabela & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+Public Sub EnviaEmailProtestoAptoCQ(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?<br><br>" & _
+                "" & CorpoDoEmail & "" & _
+                "<br><br>" & _
+                    "" & Rotina.strHTMLTabela & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+
+Public Sub EnviaEmailProtestoEstoque(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?<br><br>" & _
+                "" & CorpoDoEmail & "" & _
+                "<br><br>" & _
+                    "" & Rotina.strHTMLTabela & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+
+Public Sub EnviaEmailCobrancaReembolsoAcima10DiasSemAtuacao(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Destinatarios = "tiago.goulart@pd.tec.br"
+'EmailsEmCopia = "tiago.goulart@pd.tec.br"
+'EmailsEmCopiaOculta = "tiago.goulart@pd.tec.br"
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "" & CorpoDoEmail & "" & _
+                "<br><br>" & _
+                "<i>A tabela corresponde ao tempo que o Reembolso está aguardando desde a data do lançamento financeiro.</i>" & _
+                "<br>" & _
+                    "" & Rotina.strHTMLTabela & "" & _
+                "<br><br>" & _
+                "<i font='8px'>A tabela corresponde ao tempo que o Reembolso está aguardando a atuação da área responsável.</i>" & _
+                "<br>" & _
+                    "" & Rotina.strHTMLTabela2 & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+
+Public Sub EnviaEmailDocEletronicoIQe(Remetente, Destinatarios, EmailsEmCopia, AssuntoEmail As Variant, CorpoDoEmail As Variant, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?<br><br>" & _
+                "" & CorpoDoEmail & "" & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
