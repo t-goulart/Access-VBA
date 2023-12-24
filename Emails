@@ -1,0 +1,478 @@
+Option Compare Database
+
+
+Public Sub EnviaEmailBaseSemDados(EmailRemetente, EmailsDestinatarios, NomeDoCliente As String, NomeDaAutomacao As String, NomeDaBase As String)
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+
+' Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+' Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+' Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+AssuntoEmail = "Atenção | Base/Consulta Vazia | Cliente " & NomeDoCliente & " | " & Date
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = EmailRemetente 'Quem envia a mensagem
+    If IsEmpty(EmailsDestinatarios) = False And EmailsDestinatarios <> "" Then .To = EmailsDestinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    If IsEmpty(Anexo) = False And Anexo <> "" Then .AddAttachment (Anexo) 'Caminho do arquivo + nome do arquivo que será anexado
+    .Subject = AssuntoEmail ' Assunto ou título
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "<!DOCTYPE html>" & _
+                "<html xmlns:v='urn:schemas-microsoft-com:vml' xmlns:o='urn:schemas-microsoft-com:office:office' lang='pt-BR'>" & _
+                "<head>" & _
+                    "<meta http-equiv='Content-Type' content='text/html; charset=utf-8'>" & _
+                    "<meta name='viewport' content='width=device-width,initial-scale=1'>" & _
+                "</head>" & _
+                "<body>" & _
+                    "Olá, tudo bem? <br><br>" & _
+                    "A automação abaixo não tem dados na base/consulta que usamos para enviar os relatórios. <br>" & _
+                    "Seguem os dados da automação: <br><br>" & _
+                    " » Cliente: " & NomeDoCliente & "<br>" & _
+                    " » Automação: " & NomeDaAutomacao & "<br>" & _
+                    " » Pasta: " & CurrentProject.Path & "<br>" & _
+                    " » Base/Consulta: " & NomeDaBase & "<br>" & _
+                    " » Data do erro: " & Format(Now, "dd/mm/yyyy") & "<br>" & _
+                    " » Horário do erro: " & Format(Now, "hh:mm:ss") & "<br><br>" & _
+                    "À disposição. <br>" & _
+                    "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                    "<b>PDtec</b>  | <i>E-mail Enviado Automaticamente</i>" & _
+                "</body>" & _
+            "</html>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+
+
+'_____________________________  REGISTRA O ENVIO DO E-MAIL _____________________________
+Call Mdl_Registro.RegistraEnvioEmail(Rotina.IdAutomacao, Rotina.NomeDaAutomacao, Rotina.NomeDoCliente, "Interno", EmailRemetente, EmailsDestinatarios, , , AssuntoEmail)
+
+End Sub
+
+
+Public Sub EnviaEmailModelo2(AssuntoEmail As Variant, Optional Anexo1 = "", Optional Anexo2 = "")
+'_____ Envia um e-mail com base nos parâmetros passados
+
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim EmailRemetente As String
+Dim EmailsDestinatarios As String
+Dim EmailsEmCopia As String
+Dim EmailsEmCopiaOculta As String
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+
+'Atribui as variáveis os e-mails correspondentes | Todos os e-mails estão em um arquivo na pasta E:\PDTec_Automacoes_Monitoramento
+EmailRemetente = Mdl_Emails.RetornaEmails("BASE_EMAILS", "EMAIL", "AUTOMACAO", Rotina.NomeDaAutomacao, "FROM")
+EmailsDestinatarios = Mdl_Emails.RetornaEmails("BASE_EMAILS", "EMAIL", "AUTOMACAO", Rotina.NomeDaAutomacao, "TO")
+EmailsEmCopia = Mdl_Emails.RetornaEmails("BASE_EMAILS", "EMAIL", "AUTOMACAO", Rotina.NomeDaAutomacao, "CO")
+EmailsEmCopiaOculta = Mdl_Emails.RetornaEmails("BASE_EMAILS", "EMAIL", "AUTOMACAO", Rotina.NomeDaAutomacao, "BCC")
+
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = EmailRemetente 'Quem envia a mensagem
+    If IsEmpty(EmailsDestinatarios) = False And EmailsDestinatarios <> "" Then .To = EmailsDestinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    If IsEmpty(Anexo1) = False And Anexo1 <> "" Then .AddAttachment (Anexo1) 'Caminho do arquivo + nome do arquivo que será anexado
+    If IsEmpty(Anexo2) = False And Anexo2 <> "" Then .AddAttachment (Anexo2) 'Caminho do arquivo + nome do arquivo que será anexado
+    .Subject = "" & AssuntoEmail & ""
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Prezados, " & SaldacaoParaEmails & "<br><br>" & _
+                "As automações que estão no relatório não foram executadas dentro do período obrigatório.<br><br>" & _
+                "Primeiro verifique seus e-mails com alerta de erro.<br><br>" & _
+                "Execute novamente a automação.<br><br>" & _
+                "<B>INFORMAÇÃO CONFIDENCIAL</B><BR>" & _
+                "<B>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+ 
+End Sub
+
+
+
+Public Sub EnviaEmailModelo1(EmailRemetente, EmailDestinatarios, AssuntoEmail As Variant, Optional EmailsEmCopia = "", Optional Anexo = "", Optional EmailsEmCopiaOculta = "")
+'_____ Envia um e-mail com base nos parâmetros passados
+
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = EmailRemetente 'Quem envia a mensagem
+    If IsEmpty(EmailDestinatarios) = False And EmailDestinatarios <> "" Then .To = EmailDestinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    If IsEmpty(Anexo) = False And Anexo <> "" Then .AddAttachment (Anexo) 'Caminho do arquivo + nome do arquivo que será anexado
+    .Subject = "" & AssuntoEmail & ""
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Prezados, " & SaldacaoParaEmails & "<br><br>" & _
+                "As automações que estão no relatório não foram executadas dentro do período obrigatório.<br><br>" & _
+                "Primeiro verifique seus e-mails com alerta de erro.<br><br>" & _
+                "Execute novamente a automação.<br><br>" & _
+                "<B>INFORMAÇÃO CONFIDENCIAL</B><BR>" & _
+                "<B>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+ 
+End Sub
+
+
+Public Sub EnviaQtdeEmails(EmailRemetente, EmailDestinatarios, AssuntoEmail As Variant, Optional EmailsEmCopia = "", Optional Anexo = "", Optional EmailsEmCopiaOculta = "", Optional ParametrosAdicionais As Variant = "")
+'_____ Envia um e-mail com o resumo da quantidade de e-mails automáticos enviados
+
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = EmailRemetente 'Quem envia a mensagem
+    .To = EmailDestinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    If IsEmpty(Anexo) = False And Anexo <> "" Then .AddAttachment (Anexo) 'Caminho do arquivo + nome do arquivo que será anexado
+    .Subject = "Resumo E-mail | " & AssuntoEmail & " - " & Date
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Prezados, " & SaldacaoParaEmails & "<br><br>" & _
+                "O processo de envio automatico foi finalizado.<br><br>" & _
+                "E-mails enviados hoje: " & ParametrosAdicionais & "<br><br>" & _
+                "<B>INFORMAÇÃO CONFIDENCIAL</B><BR>" & _
+                "<B>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+ 
+End Sub
+
+
+Public Function RetornaEmails(BaseDeDados As String, CampoComEmails As String, CampoParaComparacao As String, VariavelComparacao As Variant, Optional Tipo As String)
+'_____ Procura e-mails de um mesmo cliente em uma base de dados, baseado em uma informação passada nos parâmetros _
+    Por exemplo, retorna todos os e-mails do cliente X, baseado no seu CNPJ
+' Parâmetros: _
+    BaseDeDados: Base de dados que contém os e-mails _
+    CampoComEmails: Campo que deve tem os e-mails que devem ser retornados _
+    CampoParaComparacao: Campo da tabela que será usado no WHERE DO SELECT para comparar as informações, exemplo: CPFCNPJ _
+    VariavelComparacao: Dado que será usado para comparar com o campo anteriomente informado
+
+' Declaração das variáveis
+Dim EmailsUnidos As String
+Dim rstEmail As DAO.Recordset
+
+' Limpa as variáveis
+EmailsUnidos = ""
+Set rstEmail = Nothing
+
+'Se o campo Tipo de e-mail estiver vazio entra nessa condição
+If IsNull(Tipo) = True Then
+
+    ' Seleciona na base informada os dados conforme o campo de comparação informado
+    Set rstEmail = CurrentDb.OpenRecordset("SELECT " & CampoComEmails & " FROM " & BaseDeDados & " WHERE " & CampoParaComparacao & " = '" & VariavelComparacao & "'")
+
+ElseIf IsNull(Tipo) = False Then
+    
+    ' Seleciona na base informada os dados conforme o campo de comparação informado
+    Set rstEmail = CurrentDb.OpenRecordset("SELECT " & CampoComEmails & " FROM " & BaseDeDados & " WHERE " & CampoParaComparacao & " = '" & VariavelComparacao & "' AND TIPO = '" & Tipo & "' AND STATUS = 'ATIVO'")
+
+End If
+
+
+' Itera sobre os registros da tabela | Se o EOF = True significa que ñ tem registro
+Do While rstEmail.EOF = False
+    ' Se tem informação no registro retorna false e entra nessa condição
+    If rstEmail.EOF = False Then
+        ' A variável vai receber a concatenação dos e-mails localizados com base informada
+         EmailsUnidos = EmailsUnidos & rstEmail(CampoComEmails) & ";"
+        ' Vai para o próximo registro
+        rstEmail.MoveNext
+    End If
+Loop
+
+' Atribui os e-mails localizados para a função
+RetornaEmails = EmailsUnidos
+
+End Function
+
+
+Public Sub EnviaEmailErro(EmailOrigem, EmailsDestino, NomeDoCliente As String, NomeDaAutomacao As String, Periodicidade As Variant, NumeroDoErro As Variant, DescricaoDoErro As Variant, DataInicioDoProcessamento As Variant)
+' _____ Envia um e-mail com erros identificados nessa automação
+' Como usar??? _
+    ' 1 - Declare no início do código que deve receber a verificação dos erros: On Error GoTo Digite_O_Nome_Da_Verificacao
+    ' 2 - Copie o código abaixo no final da rotina (Antes do tratamento de erro) e apenas substituia os campos de destinatário, cliente e peridiocidade: _
+        'Faz o envio de e-mail para tratamento de erros informando o cliente, nome da automação, peridiocidade, numero do erro e descrição do erro
+        'Call Mdl_Emails.EnviaEmailErro("erro.automacao@pd.tec.br", "tiago.goulart@pd.tec.br", "IQe", Err.Source, "Diário", Err.Number, Err.Description)
+
+' Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+
+' Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+' Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+' Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = EmailOrigem 'Remetemente
+    .To = EmailsDestino 'Destinatário
+    .Subject = "Erro Automação - " & NomeDoCliente & " - " & NomeDaAutomacao & " - " & Date ' Assunto ou título
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, " & SaldacaoParaEmails & "<br><br> " & _
+            "Segue dados do erro de processamento da automação: <br><br>" & _
+            " » Cliente: " & NomeDoCliente & "<br>" & _
+            " » Automação: " & NomeDaAutomacao & "<br>" & _
+            " » Pasta: " & CurrentProject.Path & "<br>" & _
+            " » N° do erro: " & NumeroDoErro & "<br>" & _
+            " » Descrição do erro: " & DescricaoDoErro & "<br>" & _
+            " » Peridiocidade: " & Periodicidade & "<br>" & _
+            " » Data do erro: " & Format(Now, "dd/mm/yyyy") & "<br>" & _
+            " » Horário do erro: " & Format(Now, "hh:mm:ss") & "<br>" & _
+            "À disposição. <br><br>" & _
+            "<B>INFORMAÇÃO CONFIDENCIAL</b><br><br>" & _
+            "<b>PDtec</b>  | <i>E-mail Enviado Automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+'Salva na tabela PRDBI_ERRO_AUTOMACOES (ASSINADOR 2.0) os dados do processamento dessa automação
+Call Mdl_Registro.RegistraErroProcessamentoOracle("PRDBI_ERRO_AUTOMACOES", NomeDoCliente, NomeDaAutomacao, NumeroDoErro, DescricaoDoErro, Periodicidade, Now)
+
+End Sub
+
+
+Public Sub EnviaEmailTempoProcessamento(EmailOrigem, EmailsDestino, NomeDoCliente, NomeDaAutomacao, Periodicidade, InicioDoProcessamento, DataInicioDoProcessamento)
+' _____ Envia um e-mail com o tempo de processamento da automação
+' Como usar??? _
+    ' 1 - Declare essas variáveis fora do escopo das rotinas: Public InicioDoProcessamento, DataInicioDoProcessamento
+    ' 2 - Atribuia o valor dessas variáveis incio do primeiro código: DataInicioDoProcessamento = Now e InicioDoProcessamento = Timer
+    ' 3 - Copie o código abaixo no final da rotina (Antes do tratamento de erro) e apenas substituia os campos de destinatário, cliente, automação e peridiocidade: _
+        ' Envia um e-amail com o tempo de processamento
+        ' Call Mdl_Emails.EnviaEmailTempoProcessamento("monitoramento.automacao@pd.tec.br", "tiago.goulart@pd.tec.br", "IQe", "IQe_Automacao_Emails", "Diário", InicioDoProcessamento, DataInicioDoProcessamento)
+
+' Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+
+' _____ Calcula o tempo de processamento | Necessário entender se esse é o ultimo passo do fluxo
+' Termino do processamento menos o inicio do processamento em minutos
+TempoDeProcessamento = (Timer - InicioDoProcessamento) / 60
+
+' Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+' Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+' Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+' Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = EmailOrigem ' Remetemente
+    .To = EmailsDestino ' Destinatário
+    .Subject = "Tempo de processamento da Automação - " & NomeDoCliente & " | " & NomeDaAutomacao & " - " & Date ' Assunto ou título
+    ' Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, " & SaldacaoParaEmails & "<br><br> " & _
+            "Segue dados do tempo de processamento da automação: <br><br>" & _
+            " » Cliente: " & NomeDoCliente & "<br>" & _
+            " » Automação: " & NomeDaAutomacao & "<br>" & _
+            " » Data do Processamento: " & Format(DataInicioDoProcessamento, "dd/mm/yyyy") & "<br>" & _
+            " » Horário de inicio do Processamento: " & Format(DataInicioDoProcessamento, "hh:mm:ss") & "<br>" & _
+            " » Horário de término do Processamento: " & Format(Now, "hh:mm:ss") & "<br>" & _
+            " » Tempo de Processamento em minutos: " & TempoDeProcessamento & "<br><br>" & _
+            "À disposição. <br><br>" & _
+            "<B>INFORMAÇÃO CONFIDENCIAL</b><br><br>" & _
+            "<b>PDtec</b>  | <i>E-mail Enviado Automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor ' Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send ' Send faz o envio do e-mail
+End With
+
+' Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+Public Function SaldacaoParaEmails() As String
+'_____ Função que retorna uma saldação conforme o horário atual
+
+' Declaração das variáveis
+Dim HorarioAtual As Date
+
+' Atribuição de valor
+HorarioAtual = Format(Now, "hh:mm:ss")
+
+' Selecione caso o valor da variável temporal
+Select Case HorarioAtual
+    ' Seu valor está entre 6h e 12h
+    Case CDate("06.00.00") To CDate("12.00.00")
+        SaldacaoParaEmails = "Bom dia!"
+    ' Seu valor está entre 12h e 18h
+    Case CDate("12.00.01") To CDate("18.00.00")
+        SaldacaoParaEmails = "Boa tarde!"
+    ' Se não sempre será boa noite
+    Case Else
+        SaldacaoParaEmails = "Boa noite!"
+End Select
+
+End Function
+
+Public Function RecolheImagem(stImagem)
+
+Dim X, ultimo_x
+'vamos buscar só o nome da imagem
+X = InStr(1, stImagem, "\")
+Do
+  ultimo_x = X
+  X = InStr(X + 1, stImagem, "\")
+Loop Until X = 0
+RecolheImagem = Mid(stImagem, _
+                   InStr(ultimo_x, stImagem, "\") + 1, _
+                   Len(stImagem))
+                   
+End Function
+
