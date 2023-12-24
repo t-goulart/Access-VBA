@@ -1,0 +1,10 @@
+Public Function RemoveArquivoExistente(Caminho As String, NomeDoArquivo As String)
+'O arquivo será excluído se já existir na pasta destino
+'Essa função não retorna nada apenas gerencia arquivos
+
+'Se o arquivo já existe será excluido
+If Dir(Caminho & NomeDoArquivo, vbArchive) <> vbNullString Then
+    Kill Caminho & NomeDoArquivo
+End If
+
+End Function
