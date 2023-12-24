@@ -1,0 +1,1233 @@
+Option Compare Database
+
+'Declara variáveis globais
+Public IdAutomacao As Integer
+Public QtdeTentativas As Integer
+Public GrupoFila As String 'Outro módulo chama essa variável
+Public CaminhoRede As String
+Public CaminhoLocal As String
+Public Peridiocidade As String
+Public NomeDoCliente As String
+Public NomeDaAutomacao As String
+Public Navegador As InternetExplorer
+Public InicioDoProcessamento  'Variável para mensurar o tempo de processamento
+Public DataInicioDoProcessamento 'Variável para mensurar o tempo de processamento
+Public Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As LongPtr) ' Método de tempo de espera Sleep
+
+
+
+Public Function ExecutaWebScraptingConfirmacaoValores()
+
+'Declara variáveis locais
+Dim rstFrequencia As DAO.Recordset
+
+
+
+'_____________________________ DADOS DE PROCESSAMENTO _____________________________
+InicioDoProcessamento = Timer
+DataInicioDoProcessamento = Now
+NomeDoCliente = "Itau"
+NomeDaAutomacao = "Itau_Follow_RaspagemTela"
+Peridiocidade = "Diaria"
+IdAutomacao = Mdl_Registro.ValidaIdAutomacao(NomeDaAutomacao)
+
+
+
+GrupoFila = "ND" 'Atribui a variável global a fila que será consultada
+QtdeTentativas = 1 'Atribui a variável Global o valor inicial
+
+
+'Chama a rotina principal
+Call ExecutaWebScrapting
+
+
+
+End Function
+
+
+
+Public Function ExecutaWebScrapting()
+
+'Declara variáveis locais
+Dim NomeArquivo As String
+Dim ArquivoAnexo As String
+Dim AssuntoEmail As String
+Dim EmailsEmCopia As String
+Dim EmailRemetente As String
+Dim EmailsDestinatarios As String
+Dim QtdeLinhas As Integer
+Dim QtdeTentativas As Integer
+
+
+
+'Ativa (True) ou Desativa (False) avisos padrão do Access
+DoCmd.SetWarnings False
+
+
+
+'Tratamento de erro
+On Error GoTo TratarErro
+
+
+
+'_____________________________ ATRIBUI VALOR AS VARIÁVEIS _____________________________
+SufixoArquivo = Format(Now, "yyyymmdd")
+CaminhoLocal = CurrentProject.Path & "\"
+CaminhoRede = "\\fsapps\Shares2\Relatorios-MIS\Itau_Follow_RaspagemTela\"
+
+
+
+'_____________________________ ATUALIZA A TABELA LOCAL _____________________________
+'Limpa a tabela antes de iniciar os processos
+DoCmd.RunSQL "DELETE FROM TBL_NOVAS_PROPOSTAS"
+
+
+
+'_____________________________ ROTINA PRINCIPAL _____________________________
+'Se a quantidade de tentativas é menor ou igual a 3 entra nessa condição
+If QtdeTentativas <= 3 Then
+
+    'Chama a rotina principal que contém a base para todas as demais automações deste arquivo
+    Call ExtrairPropostas.ExtrairPropostasDaWeb
+    
+    Sleep (5000) 'Aguarda 5 segundos antes de continuar
+    
+    'Remove a linha que contém a palavra "Página" caso a automação tenha incluido (ñ deve incluir) na base de dados
+    Call Mdl_Funcoes.RemoverPalavra("Página", "TBL_NOVAS_PROPOSTAS", "PROPOSTA")
+    
+    Sleep (5000) 'Aguarda 5 segundos antes de continuar
+    
+    'Remove a linha que não tem proposta (Vazio)
+    Call Mdl_Funcoes.RemoveVazios("TBL_NOVAS_PROPOSTAS", "PROPOSTA")
+    
+    Sleep (5000) 'Aguarda 5 segundos antes de continuar
+    
+    'Adiciona dados as colunas de Data e Hora do vencimento
+    Call ExtrairPropostas.AdicionaVencimentoSLA
+    
+    Sleep (5000) 'Aguarda 5 segundos antes de continuar
+    
+    'Chama a sub rotina que remove os valores duplicados e ordena os dados pelo campo Responsável
+    Call Rotina.RemoveDadosDuplicadosDaTabelaNovasPropostas
+    
+    'Insere na tabela a Descrição da Tarefa que não foi preenchida
+    Call ExtrairDescricaoTarefa.ExtrairDescricaoTarefaDaWeb
+    
+    Sleep (5000) 'Aguarda 5 segundos antes de continuar
+    
+    
+    '______________________ Se a tabela usada como base estiver vazia tenta novamente
+    QtdeLinhas = DCount("[PROPOSTA]", "TBL_NOVAS_PROPOSTAS", "[PROPOSTA] IS NOT NULL")
+    
+    'Se a Qtde de linhas é igual a 0, nulo ou vazio tenta buscar os dados novamente
+    If QtdeLinhas = 0 Then
+        
+        'Soma a variável de controle
+        QtdeTentativas = QtdeTentativas + 1
+        
+        'Chama a rotina principal novamente
+        Call ExecutaWebScrapting
+    
+    
+    ElseIf QtdeLinhas > 0 Then
+    
+        '_____________________________ SUB ROTINAS _____________________________
+        'Chama a sub rotina que preenche as colunas Canal e Responsável
+        Call Rotina.PreencheTabelaLocalComDadosDaFenix
+        
+        'Chama a sub rotina que ordena os dados da tabela para organizar por responsável
+        Call Rotina.ReordenaOsDadosDaTabela
+        
+          
+        '_____________________________ GERENCIAMENTO DA PASTA NA REDE _____________________________
+        'Testa se tem acesso a rede
+        Call Mdl_Conexao.TestaAcessoDaRede(CaminhoRede, NomeDoCliente, NomeDaAutomacao, Peridiocidade, DataInicioDoProcessamento)
+        
+        'Gerencia as pastas apagando o histórico que for superio a qtde de dias informados
+        Call Mdl_Conexao.GerenciaPastasEArquivos(CaminhoRede, 365)
+        
+        'Local onde os relatórios são salvos | Novo caminho da rede
+        CaminhoRede = Mdl_Funcoes.CriaPastaDestino(CaminhoRede)
+
+        'Exclui as linhas em branco
+        Call Itau_Follow_RaspagemTela.ExcluirLinhasEmBranco
+
+        '_____________________________ SUB ROTINAS _____________________________
+        'Chama a sub rotina que envia o e-mail por analista com seu respectivo relatório antes de enviar um relatório geral
+        Call EnviarEmailsAnalistas.FiltraConsultaPorAnalistaEEnviaEmail(CaminhoLocal, CaminhoRede)
+
+
+        '_____________________________ EXPORTA ARQUIVO _____________________________
+        'A partir desse ponto exporta um relatório com todos os dados
+        'Exporta os dados da consulta "EXPORT_TBL_LOCAL" utilizando o assistente de exportação
+        DoCmd.RunSavedImportExport ("EXPORTA_TBL_LOCAL")
+        
+        'Atribui a variável o nome do arquivo
+        NomeArquivo = "Itau_Novas_Propostas-" & Rotina.GrupoFila & "_" & Format(Now(), "yyyymmddhhmmss") & ".xlsx"
+        
+        '_____ Aguarda 3 segundos antes de ir para a próxima etapa
+        Sleep (3000)
+        
+        'Procura o arquivo na pasta informa e renomeia salvando (Recorta e cola) na pasta destino na rede
+        Name CaminhoLocal & "TBL_NOVAS_PROPOSTAS.xlsx" As CaminhoRede & NomeArquivo
+        
+        'Atribui a variável o caminho e nome do arquivo que será enviado
+        ArquivoAnexo = CaminhoRede & NomeArquivo
+    
+        
+        '__________________________ ENVIO DO EMAIL __________________________
+        'Envia o email com base na tabela de Emails localizada na pasta E:\PDTec_Automacoes_Monitoramento
+        Call Rotina.EnviaEmail("Itaú | Propostas Segmentação | Confirmação de Valores | " & Date, ArquivoAnexo)
+    
+    End If
+    
+End If
+
+
+
+'_____________________________  REGISTRO DO PROCESSAMENTO DA AUTOMAÇÃO _____________________________
+'Envia um e-amail com o tempo de processamento
+'Call Mdl_Emails.EnviaEmailTempoProcessamento("monitoramento.automacao@pd.tec.br", "tiago.goulart@pd.tec.br", NomeDoCliente, NomeDaAutomacao, Peridiocidade, InicioDoProcessamento, DataInicioDoProcessamento)
+'Salva na tabela MONITORAMENTO_AUTOMACOES (ASSINADOR 2.0) os dados do processamento dessa automação
+Call Mdl_Registro.RegistraTempoProcessamentoOracle("PRDBI_MONITORAMENTO_AUTOMACOES", NomeDoCliente, IdAutomacao, NomeDaAutomacao, Peridiocidade, DataInicioDoProcessamento, Now)
+
+
+
+'_____________________________ ATUALIZA A TABELA LOCAL _____________________________
+'DoCmd.RunSQL "DELETE FROM TBL_NOVAS_PROPOSTAS"
+
+
+
+'Ativa (True) ou Desativa (False) avisos padrão do Access
+DoCmd.SetWarnings True
+
+
+
+'_____________________________  ENCERRA O ACCESS _____________________________
+DoCmd.Quit
+
+
+
+'_____________________________ TRATAMENTO DE ERROS _____________________________
+TratarErro:
+    Debug.Print Err.Number
+    Debug.Print Err.Description
+    If Err.Number <> 0 Then
+        Call Mdl_Emails.EnviaEmailErro("erro.automacao@pd.tec.br", "fabiola.leitao@pd.tec.br;ingrit.lopes@pd.tec.br;monica.chaves@pd.tec.br;raquel.farias@pd.tec.br;tatiane.vivas@pd.tec.br;tiago.goulart@pd.tec.br;tiago.macedo@pd.tec.br", NomeDoCliente, NomeDaAutomacao, Peridiocidade, Err.Number, Err.Description, DataInicioDoProcessamento)
+    End If
+
+End Function
+
+
+
+Public Sub AtualizaTabelasExcel()
+
+'Declara variáveis locais
+Dim CaminhoLocal As String
+Dim Excel_WB As Excel.Workbook
+Dim Excel_WS As Excel.Worksheet
+Dim Excel_App As New Excel.Application
+Dim AtualizaPropostas As DAO.Recordset
+
+
+'_____________________________ ATRIBUI VALOR AS VARIÁVEIS _____________________________
+NomeArquivo = "Itau_Follow_RaspagemTela.xlsm"
+CaminhoLocal = CurrentProject.Path & "\"
+
+
+'_____________________________ ROTINA PRINCIPAL _____________________________
+'Exibe o arquivo
+Excel_App.Visible = True
+
+'Ativa/Desativa os alertas
+Excel_App.EnableEvents = False
+
+'Abre o arquivo para atualizar seus dados
+Set Excel_WB = Excel_App.Workbooks.Open(CaminhoLocal & NomeArquivo)
+
+'_____ Aguarda
+'Sleep (200000)
+
+'Atualiza tudo
+Excel_WB.RefreshAll
+
+'_____  Aguarda
+Sleep (900000)
+
+'Salva o arquivo
+Excel_WB.Save
+
+'Fecha o arquivo
+Excel_WB.Close
+
+'Ativa/Desativa os alertas
+Excel_App.EnableEvents = True
+
+'Exibe o arquivo
+Excel_App.Visible = False
+
+'Encerra o Excel
+Excel_App.Quit
+
+
+
+'_____________________________  LIMPA AS VARIÁVEIS _____________________________
+Set Excel_WB = Nothing
+Set Excel_App = Nothing
+
+         
+End Sub
+
+
+
+Public Sub PreencheTabelaLocalComDadosDaFenix()
+'Sub rotina que preenche os campos com informações coletadas da Fênix
+'Preenche os campos canal e responsável (e-mail) usando como base o campo proposta
+
+'Declara as variáveis locais
+Dim Canal As Variant
+Dim Responsavel As Variant
+Dim rstBaseOracle As DAO.Recordset
+Dim rstNovasPropostas As DAO.Recordset
+
+'Ativa (True) ou Desativa (False) avisos padrão do Access
+DoCmd.SetWarnings False
+
+'_____________________________ ROTINA PRINCIPAL _____________________________
+Set rstNovasPropostas = CurrentDb.OpenRecordset("SELECT * FROM TBL_EXCEL_ORACLE")
+
+'Itera sobre as linhas da base LOCAL
+Do While rstNovasPropostas.EOF = False
+
+    'Se tem informações na base entra nessa condição
+    If rstNovasPropostas.EOF = False Then
+    
+        '_____________________________ ATRIBUI VALOR AS VARIÁVEIS _____________________________
+        'Consulta na base do Oracle o canal e o responsável com base na proposta
+        Proposta = rstNovasPropostas("PROPOSTA")
+        
+        
+        
+        'Abre a base e atribui a variável os dados correspondentes a pesquisa na base do Oracle
+        Set rstBaseOracle = CurrentDb.OpenRecordset("SELECT PROPOSTA, CANAL, RESPONSAVEL FROM TBL_EXCEL_ORACLE WHERE PROPOSTA ='" & Proposta & "'")
+
+        
+        
+        '_____________________________ ATRIBUI VALOR AS VARIÁVEIS _____________________________
+        Canal = Nz(rstBaseOracle("CANAL"), "SEM CANAL")
+        Responsavel = Nz(rstBaseOracle("RESPONSAVEL"), "SEM RESPONSAVEL")
+        
+        
+        
+        '_____________________________ ATUALIZA A TABELA LOCAL _____________________________
+        'Atualiza o campo que corresponde a proposta
+        DoCmd.RunSQL "UPDATE TBL_NOVAS_PROPOSTAS SET CANAL ='" & Canal & "' WHERE PROPOSTA = '" & Proposta & "'"
+        DoCmd.RunSQL "UPDATE TBL_NOVAS_PROPOSTAS SET RESPONSAVEL ='" & Responsavel & "' WHERE PROPOSTA = '" & Proposta & "'"
+        
+        
+        
+        'Vai para a próxima linha da tabela local
+        rstNovasPropostas.MoveNext
+        
+    Else
+        
+        'Se não tem mais dados para consultar sai do laço
+        Exit Do
+    
+    End If
+    
+Loop
+
+
+
+'_____________________________ LIMPA VARIÁVEL LOCAL _____________________________
+Set rstBaseOracle = Nothing
+Set rstNovasPropostas = Nothing
+
+'Ativa (True) ou Desativa (False) avisos padrão do Access
+DoCmd.SetWarnings False
+
+End Sub
+
+
+ 
+Public Sub ExcluirLinhasEmBranco()
+Dim strSQL As String
+    
+'Defina a consulta SQL para excluir linhas com dados em branco na coluna
+strSQL = "DELETE FROM TBL_NOVAS_PROPOSTAS WHERE RESPONSAVEL IS NULL OR RESPONSAVEL = '';"
+    
+'Execute a consulta SQL
+CurrentDb.Execute strSQL
+    
+End Sub
+
+
+
+Public Sub ReordenaOsDadosDaTabela()
+
+'Declara as variáveis locais
+Dim rstOrdenaResponsavel As DAO.Recordset
+
+
+'_____ Ordena os dados por hora e data (Primeiro hora e depois Data)
+'Abre a tabela auxiliar TBL_NOVAS_PROPOSTAS
+Set rstOrdenaResponsavel = CurrentDb.OpenRecordset("TBL_NOVAS_PROPOSTAS", dbOpenDynaset)
+
+'Abre a tabela para ordernar os dados
+DoCmd.OpenTable "TBL_NOVAS_PROPOSTAS", acViewNormal, acReadOnly
+
+'Organiza os dados por hora e data ascendente
+DoCmd.SetOrderBy "RESPONSAVEL ASC"
+
+'Fecha a tabela salvando a ordenação
+DoCmd.Close acTable, "TBL_NOVAS_PROPOSTAS", acSaveYes
+
+'Fecha a conexão com a tabela
+rstOrdenaResponsavel.Close
+
+
+
+'_____________________________ LIMPA VARIÁVEL LOCAL _____________________________
+Set rstOrdenaResponsavel = Nothing
+
+End Sub
+
+
+Public Sub RemoveDadosDuplicadosDaTabelaNovasPropostas()
+'Após realizar todas as consultas remove os valores duplicados da tabela antes de realizar o envio
+
+
+'Declara as variáveis locais
+Dim QtdeDeDadosEncontrados As Integer
+Dim rstNovasPropostas As DAO.Recordset
+
+
+
+'_____________________________ ATRIBUI VALOR A VARIÁVEL _____________________________
+Set rstNovasPropostas = CurrentDb.OpenRecordset("SELECT * FROM TBL_NOVAS_PROPOSTAS")
+
+
+
+'_____________________________ ROTINA PRINCIPAL _____________________________
+'Itera sobre todas as linhas da tabela
+Do Until rstNovasPropostas.EOF
+    
+    'Atribui a variável local a qtde de vezes que o mesmo registro foi localizado
+    QtdeDeDadosEncontrados = DCount("*", "TBL_NOVAS_PROPOSTAS", "PROPOSTA='" & rstNovasPropostas("PROPOSTA") & "' AND FILA='" & rstNovasPropostas("FILA") & "' AND DATA='" & rstNovasPropostas("DATA") & "' AND HORA='" & rstNovasPropostas("HORA") & "' AND HORA_VENCIMENTO='" & rstNovasPropostas("HORA_VENCIMENTO") & "'")
+    
+    'Se a consulta retornar mais de 1 significa que encontrou valores duplicados
+    If QtdeDeDadosEncontrados > 1 Then
+        
+        'Apaga a linha atual
+        rstNovasPropostas.Delete
+        
+    End If
+    
+    'Vai para a próxima linha
+    rstNovasPropostas.MoveNext
+Loop
+
+
+
+'_____________________________ LIMPA VARIÁVEL LOCAL _____________________________
+Set rstNovasPropostas = Nothing
+
+End Sub
+
+
+
+Public Sub EnviaEmail(AssuntoEmail As Variant, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+Dim indice As Integer
+Dim EmailsEmCopia As String
+Dim EmailRemetente As String
+Dim EmailsDestinatarios As String
+Dim EmailsEmCopiaOculta As String
+
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+
+'Atribui as variáveis os e-mails correspondentes | Todos os e-mails estão em um arquivo na pasta E:\PDTec_Automacoes_Monitoramento
+EmailRemetente = Mdl_Emails.RetornaEmails("BASE_EMAILS", "EMAIL", "AUTOMACAO", Rotina.NomeDaAutomacao, "FROM")
+EmailsDestinatarios = Mdl_Emails.RetornaEmails("BASE_EMAILS", "EMAIL", "AUTOMACAO", Rotina.NomeDaAutomacao, "TO")
+EmailsEmCopia = Mdl_Emails.RetornaEmails("BASE_EMAILS", "EMAIL", "AUTOMACAO", Rotina.NomeDaAutomacao, "CO")
+EmailsEmCopiaOculta = Mdl_Emails.RetornaEmails("BASE_EMAILS", "EMAIL", "AUTOMACAO", Rotina.NomeDaAutomacao, "BCC")
+
+'EmailsDestinatarios = "tiago.goulart@pd.tec.br"
+'EmailsEmCopia = "tiago.goulart@pd.tec.br"
+'EmailsEmCopiaOculta = "tiago.goulart@pd.tec.br"
+
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .FROM = EmailRemetente 'Quem envia a mensagem
+    If IsEmpty(EmailsDestinatarios) = False And EmailsDestinatarios <> "" Then .To = EmailsDestinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    If IsEmpty(Anexo) = False And Anexo <> "" Then .AddAttachment (Anexo) 'Caminho do arquivo + nome do arquivo que será anexado
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Prezados, " & Mdl_Emails.SaldacaoParaEmails & "<br><br>" & _
+                "Segue base referente ao grupo: " & Rotina.GrupoFila & "<br><br>" & _
+                "Salvo em: " & Rotina.CaminhoRede & "<br><br><br>" & _
+                "Em caso de dúvidas, favor entrar em contato com nosso Planejamento Estratégico." & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
+
+
+
+
+'Modulo Extrair Proposta
+Option Compare Database
+
+Dim TempoTotal
+
+Public NomeDoCliente As String
+Public NomeDaAutomacao As String
+Public Peridiocidade As String
+Public InicioDoProcessamento  'Variável para mensurar o tempo de processamento
+Public DataInicioDoProcessamento 'Variável para mensurar o tempo de processamento
+Dim opt As Integer
+Dim Fila As String
+Dim HTML As HTMLDocument
+Dim rstTabelaFila As DAO.Recordset, rstTabelaSLA As DAO.Recordset, rstTabelaNovasPropostas As DAO.Recordset
+Public Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As LongPtr) ' Método de tempo de espera Sleep
+
+
+
+Public Sub ExtrairPropostasDaWeb()
+'_____ Preenche as colunas PROPOSTA, FILA, DATA e HORA | No arquivo original(Excel)está no módulo MNovasPropostas _
+    Esse é o módulo principal e o primeiro a ser executado depois ExtrairProdutos e ExtrairDescricaoTarefa antes de enviar um e-mail
+'Tempo de processamento: 15 minutos
+
+'Declara as variáveis
+Dim td As Integer 'Tag que vamos usar como referência na página
+Dim Pagina As Integer 'Usada quando tem 15 registros ou menos (Apenas uma página)
+Dim PaginaAtual As Integer 'Usada quando tem mais de 15 registros (Vai ter várias páginas)
+Dim QuantidadePropostas As Integer
+Dim Mytabela1 As String 'Variável que vai receber os dados da segunda coluna das tabelas
+Dim Mytabela2 As String
+
+'Declara as variáveis que serão usadas para extrair os dados que estão na primeira e segunda linha da segunda coluna
+Dim QuadrosSegundaColuna() As String 'Focado na segunda coluna da tabela
+Dim PrimeiraLinhaDoQuadro() As String 'Cada quadro é composto por 3 linhas | Essa recebe dados apenas da 1° linha
+Dim SegundaLinhaDoQuadro() As String 'Cada quadro é composto por 3 linhas | Essa recebe dados apenas da 2ª linha
+Dim SegundaLinhaDataHora() As String 'Captura a data e hora da segunda linha (Usa o " às " como separador)
+Dim DataHoraFinal() As String
+Dim TagtdDaPrimeiraTabela As Integer
+Dim TagtdDaSegundaTabela As Integer
+
+
+
+On Error Resume Next
+
+
+
+'_____ Captura o inicio do processamento da automação | Retorna o tempo em segundos
+ExtrairPropostas.InicioDoProcessamento = Timer
+DataInicioDoProcessamento = Now
+
+
+
+'Atribui as propriedades do IE para a variável
+Set Rotina.Navegador = New InternetExplorer
+
+'_____ Acessando a página do Itau
+'Abre o site do Itau - PÁGINA DE LOGIN
+Rotina.Navegador.Navigate "https://ww39.itau.com.br/j186/vp/inicio"
+
+Sleep (8000) 'Aguarda 8 segundos antes de continuar
+
+'Exibe o navegador (Essa ação faz com que o navegador está oculto apareça)
+Rotina.Navegador.Visible = True
+
+Sleep (8000) 'Aguarda 8 segundos antes de continuar
+
+
+
+'_________ Verifica se precisa fazer o acesso | Se já está com usuário ativo ignora a parte de login e senha
+'Atribui as propriedades a variável HTML
+Set HTML = Rotina.Navegador.Document
+
+'Procura o elemento username
+Set BuscaElementoNaPagina = HTML.getElementById("username")
+
+If Not BuscaElementoNaPagina Is Nothing Then
+    
+    'Insere usuário e senha nas caixas da tela de login
+    Rotina.Navegador.Document.getElementById("username").Value = "033463554"
+    Rotina.Navegador.Document.getElementById("password").Value = "917353" '917350
+    
+    Sleep (5000) 'Aguarda 5 segundos antes de continuar
+    
+    'Clica no botão OK
+    Rotina.Navegador.Document.getElementById("button1").Click
+    
+    Sleep (10000) 'Aguarda 10 segundos antes de continuar
+
+End If
+
+'Vai para a página onde os dados serão consultados - HOME > GRUPO DE APOIO > GESTÃO PROPOSTAS
+Rotina.Navegador.Navigate "https://ww39.itau.com.br/j186/vp/inicio?hptAppId=VPBO&hptExec=Y&hptRecord=VPBORU"
+
+Sleep (8000) 'Aguarda 5 segundos antes de continuar
+
+'Vai para a página onde os dados serão consultados - HOME > GRUPO DE APOIO > GESTÃO PROPOSTAS
+Rotina.Navegador.Navigate "https://ww39.itau.com.br/j186/vp/inicio?hptAppId=VPBO&hptExec=Y&hptRecord=VPBORU"
+
+Do While Rotina.Navegador.Busy And Rotina.Navegador.ReadyState <> READYSTATE_COMPLETE: DoEvents: Loop
+
+'_____Consultando os dados da página de PROPOSTAS
+'Salva na variável a consulta dos dados da tabela com as filas de acordo com o grupo informado no módulo central
+Set rstTabelaFila = CurrentDb.OpenRecordset("SELECT * FROM TBL_FILA WHERE GRUPO = '" & Rotina.GrupoFila & "'")
+
+'Faça enquanto não chagar no ultimo valor da tabela
+Do While rstTabelaFila.EOF = False
+    
+    IdFila = rstTabelaFila("ID")
+    NomeFila = rstTabelaFila("FILA")
+    
+    Rotina.Navegador.Document.getElementsByName("CMB_IDX_ATIVIDADE")(0).Value = IdFila
+    Rotina.Navegador.Document.getElementsByName("CMB_IDX_ATIVIDADE")(0).FireEvent("onchange").Window
+    Sleep (3000) 'Aguarda 3 segundos antes de continuar
+    Do While Rotina.Navegador.Busy And Rotina.Navegador.ReadyState <> READYSTATE_COMPLETE: DoEvents: Loop
+    
+    Rotina.Navegador.Document.getElementsByName("CMB_IDX_ESTEIRA")(0).Value = 17
+    Rotina.Navegador.Document.getElementsByName("CMB_IDX_ATIVIDADE")(0).FireEvent("onchange").Window
+    Sleep (3000) 'Aguarda 3 segundos antes de continuar
+    Do While Rotina.Navegador.Busy And Rotina.Navegador.ReadyState <> READYSTATE_COMPLETE: DoEvents: Loop
+    
+    'Atribui a variável o valor contido na tag "b" 110 (Na centésima décima primeira tag b)
+    'Debug.Print Navegador.Document.getElementsByTagName("b")(111).Innertext
+    
+    QuantidadePropostas = Rotina.Navegador.Document.getElementsByTagName("b")(111).Innertext
+    
+    'Se a quantidade de propostas não está vazia e se é menor ou igual a 15 entra nessa condição
+    If QuantidadePropostas <= 15 And IsEmpty(QuantidadePropostas) = False Then
+            
+            'Atribui a variável o valor que inicia a primeira linha da Table Data (Tabela)
+            TagtdDaPrimeiraTabela = 192
+            
+            '_____ Faz a extração dos dados que estão sempre na segunda coluna _
+                Cada coluna contém 3 linhas e são os dados dessas linhas que devem ser extraídos
+            'Vai iterar sobre as propostas que estão na tela
+            For Proposta = 1 To QuantidadePropostas
+                
+                'Vai focar na tabela atual (2ª coluna) que contém os valores que serão extraídos
+                'Vai para a tag td "Table Data" (Tabela) e foca no campo que inicialmente vale 192
+                Mytabela1 = Rotina.Navegador.Document.getElementsByTagName("td")(TagtdDaPrimeiraTabela).Innertext
+                    
+                'Abre a tabela auxiliar TBL_NOVAS_PROPOSTAS
+                Set rstTabelaNovasPropostas = CurrentDb.OpenRecordset("TBL_NOVAS_PROPOSTAS", dbOpenDynaset)
+                'Adiciona dados na tabela TBL_NOVAS_PROPOSTAS
+                rstTabelaNovasPropostas.AddNew
+                    
+                    'Atribui ao campo a informação (Nome da fila)
+                    rstTabelaNovasPropostas("FILA") = NomeFila
+                    
+                    '_____ Extrai os dados da primeira linha
+                    'Código para extrair os dados separados da Mytabela1
+                    QuadrosSegundaColuna = Split(Mytabela1, Chr(10))
+                    PrimeiraLinhaDoQuadro = Split(QuadrosSegundaColuna(0), " | ")
+                                       
+                    'Insere o número da proposta | Remove o espaço vazio
+                    rstTabelaNovasPropostas("PROPOSTA") = Trim(PrimeiraLinhaDoQuadro(0))
+                    
+                    '_____ Extrai os dados da segunda linha
+                    'Cria um array que recebe os dados da segunda linha usando o "|" para separação
+                    SegundaLinhaDoQuadro = Split(QuadrosSegundaColuna(1), " | ")
+                    'Cria um segundo array que separa novamente os dados usando o nome da FILA como delimitador
+                    SegundaLinhaDataHora = Split(SegundaLinhaDoQuadro(1), NomeFila)
+                    'Cria um terceiro array que recebe os dados da data e hora, usando o "às" como delimitador
+                    DataHoraFinal = Split(SegundaLinhaDataHora(1), " às ")
+                    'Atribui a data ao campo informado removendo os espaços vazios com o TRIM
+                    rstTabelaNovasPropostas("DATA") = Format(Replace(Trim(DataHoraFinal(0)), ".", "/"), "dd/mm/yyyy")
+                    'Atribui a hora ao campo informado removendo os espaços vazios
+                    rstTabelaNovasPropostas("HORA") = Replace(Replace(Trim(DataHoraFinal(1)), " ", ""), Chr(13), "")
+                    
+                'Atualiza a tabela auxiliar
+                rstTabelaNovasPropostas.Update
+                'Vai para a próxima linha
+                rstTabelaNovasPropostas.MoveLast
+                    
+                'Soma mais 4 para pular para a próxima linha (Quadro de baixo)
+                TagtdDaPrimeiraTabela = TagtdDaPrimeiraTabela + 4
+                
+            Next Proposta
+                
+    'Se a quantidade de propostas não está vazia e se é maior que 15 entra nessa condição
+    ElseIf QuantidadePropostas > 15 And IsEmpty(QuantidadePropostas) = False Then
+        
+        'Se entrar nessa condição a posição onde está a quantidade de propostas está em outra tag b
+        QuantidadePropostas = (Rotina.Navegador.Document.getElementsByTagName("b")(111).Innertext / 15) + 1
+        
+        '_____ Faz a extração dos dados que estão sempre na segunda coluna _
+            Cada coluna contém 3 linhas e são os dados dessas linhas que devem ser extraídos
+        'Vai iterar sobre as propostas que estão na tela
+        For Proposta = 1 To QuantidadePropostas
+            
+            'Atribui a variável o valor que inicia a primeira linha da Table Data (Tabela)
+            TagtdDaSegundaTabela = 192
+            
+            
+            For PaginaAtual = 1 To 15
+            
+                'Abre a tabela auxiliar TBL_NOVAS_PROPOSTAS
+                Set rstTabelaNovasPropostas = CurrentDb.OpenRecordset("TBL_NOVAS_PROPOSTAS", dbOpenDynaset)
+                'Adiciona dados na tabela TBL_NOVAS_PROPOSTAS
+                rstTabelaNovasPropostas.AddNew
+            
+                    'Vai focar na tabela atual (2ª coluna) que contém os valores que serão extraídos
+                    'Vai para a tag td "Table Data" (Tabela) e foca no campo que inicialmente vale 192
+                    Mytabela2 = Rotina.Navegador.Document.getElementsByTagName("td")(TagtdDaSegundaTabela).Innertext
+                    'Atribui ao campo a informação (Nome da fila)
+                    rstTabelaNovasPropostas("FILA") = NomeFila
+                    
+                    '_____ Extrai os dados da primeira linha
+                    'Código para extrair os dados separados da Mytabela2
+                    QuadrosSegundaColuna = Split(Mytabela2, Chr(10))
+                    PrimeiraLinhaDoQuadro = Split(QuadrosSegundaColuna(0), " | ")
+                    
+                    'Atribui o numero da proposta para o campo da tabela | Remove o espaço vazio
+                    rstTabelaNovasPropostas("PROPOSTA") = Trim(PrimeiraLinhaDoQuadro(0))
+                    
+                    '_____ Extrai os dados da segunda linha
+                    'Cria um array que recebe os dados da segunda linha usando o "|" para separação
+                    SegundaLinhaDataHora = Split(QuadrosSegundaColuna(1), " | ")
+                    'Cria um terceiro array que recebe os dados da data e hora, usando o "às" como delimitador
+                    SegundaLinhaDataHora = Split(SegundaLinhaDataHora(1), NomeFila)
+                    'Cria um terceiro array que recebe os dados da data e hora, usando o "às" como delimitador
+                    DataHoraFinal = Split(SegundaLinhaDataHora(1), " às ")
+                    'Atribui a data ao campo informado removendo os espaços vazios com o TRIM
+                    rstTabelaNovasPropostas("DATA") = Format(Replace(Trim(DataHoraFinal(0)), ".", "/"), "dd/mm/yyyy")
+                    'Atribui a hora ao campo informado removendo os espaços vazios
+                    rstTabelaNovasPropostas("HORA") = Replace(Replace(Trim(DataHoraFinal(1)), " ", ""), Chr(13), "")
+                    
+                'Atualiza a tabela auxiliar
+                rstTabelaNovasPropostas.Update
+                'Vai para a próxima linha
+                rstTabelaNovasPropostas.MoveLast
+                
+                'Soma mais 4 para pular para a próxima linha (Quadro de baixo)
+                TagtdDaSegundaTabela = TagtdDaSegundaTabela + 4
+                
+            Next PaginaAtual
+            
+            Sleep (3000) 'Aguarda 3 segundos antes de continuar
+            
+            Rotina.Navegador.Document.getElementsByName("BTN_PROXIMO")(0).Click
+            Do While Rotina.Navegador.Busy And Rotina.Navegador.ReadyState <> READYSTATE_COMPLETE: DoEvents: Loop
+            
+            'Limpa a variável com a qtde de propostas
+            QuantidadePropostas = 0
+        
+            'Fecha a conexão com a tabela auxiliar
+            rstTabelaNovasPropostas.Close
+            'Limpa a variável da tabela auxiliar
+            Set rstTabelaNovasPropostas = Nothing
+        
+        Next Proposta
+    
+    End If
+    
+    Sleep (3000) 'Aguarda 3 segundos antes de continuar
+    
+    'Vai para a próxima linha da tabela
+    rstTabelaFila.MoveNext
+Loop
+
+
+
+Sleep (3000) 'Aguarda 3 segundos antes de continuar
+
+
+
+'_____________________________ ORDENA OS DADOS DA TABELA _____________________________
+'Abre a tabela auxiliar TBL_NOVAS_PROPOSTAS
+Set rstTabelaNovasPropostas = CurrentDb.OpenRecordset("TBL_NOVAS_PROPOSTAS", dbOpenDynaset)
+'Organiza os dados por hora e data ascendente
+DoCmd.SetOrderBy "HORA ASC, DATA ASC"
+'Fecha a conexão com a tabela auxiliar
+rstTabelaNovasPropostas.Close
+rstTabelaFila.Close
+
+
+'_____________________________ LIMPA AS VARIÁVEIS _____________________________
+Set rstTabelaNovasPropostas = Nothing
+Set rstTabelaFila = Nothing
+
+
+
+'_____________________________ SUB ROTINA _____________________________
+'Chama a sub rotina que abre o excel e atualiza os dados das consultas para preencher os dados da Fenix
+Call Rotina.AtualizaTabelasExcel
+
+End Sub
+
+
+
+Sub AdicionaVencimentoSLA()
+'_____ O calculo precisa somar o SLA com a data e hora que foi extraída do Itaú _
+    Levar em consideração que só pode considerar de segunda à sexta _
+    Levar em consideração que o horário precisa ser entre 08:00h às 19:00h
+        
+'Declara as variáveis locais
+Dim Fila As Variant
+Dim Proposta As Variant
+Dim DiaDaSemana As Integer
+Dim HoraSLA As Date
+Dim ColunaData As Date
+Dim ColunaHora As Date
+Dim DataVencimentoSLA As Date
+Dim HoraVencimentoSLA As Date
+Dim ConcatenaDataEHora As Date
+Dim PeriodoDeTempoSabado As Date
+Dim PeriodoDeTempoDomingo As Date
+Dim RetornaHoraSomadaComSLA As Date
+Dim DataEHoraComSLAPosValidarHorario As Date
+Dim DataEHoraComSLAPosValidarDiaDaSemana As Date
+
+
+'_____ Captura o inicio do processamento da automação | Retorna o tempo em segundos
+ExtrairPropostas.InicioDoProcessamento = Timer
+
+'Debug.Print "Inicia teste Vencimento"
+
+On Error Resume Next
+
+'Abre a tabela das propostas
+Set rstTabelaNovasPropostas = CurrentDb.OpenRecordset("SELECT * FROM TBL_NOVAS_PROPOSTAS")
+
+'Itera sobre todas as linhas da tabela de propostas
+Do While rstTabelaNovasPropostas.EOF = False
+
+    'Retorna a proposta e a fila correspondete a linha atual da tabela
+    Proposta = rstTabelaNovasPropostas("PROPOSTA")
+    Fila = rstTabelaNovasPropostas("FILA")
+    ColunaData = rstTabelaNovasPropostas("DATA").Value
+    ColunaHora = rstTabelaNovasPropostas("HORA").Value
+    
+    'Atribui a variável a soma da hora e data das colunas
+    ConcatenaDataEHora = CDate(ColunaData & " " & ColunaHora)
+    
+    'Procura na tabela de SLA o horário e atribui para a variável
+    HoraSLA = DLookup("SLA", "TBL_SLA", "FILA='" & Fila & "'")
+    
+    'Soma os dados do Itaú (Data e hora) e soma com a Hora do SLA
+    SomaDataEHoraComSLA = ConcatenaDataEHora + HoraSLA
+    
+    'Atribui a variável apenas a hora (ignorando a data)
+    RetornaHoraSomadaComSLA = Format(SomaDataEHoraComSLA, "hh:mm:ss")
+    
+    
+    '_____ 1º Passo: Verifica o período de tempo (Horas) após somar a hora do Itaú com o SLA
+    'Se o horário retornado está entre 19:00:01hs até as 07:59:59hs vai somar o período de tempo não comercial (Noite e madrugada)
+    If RetornaHoraSomadaComSLA < CDate("08:00:00") Or RetornaHoraSomadaComSLA > CDate("19:00:00") Then
+        
+        'A variável recebe o período de tempo não comercial das 19:00hs às 08:00hs
+        PeriodoDeTempoNaoComercial = CDate("13:00:00")
+        
+        'Soma a data e hora (Itau) + SLA (Hora) + Período de tempo não comercial (Noite e madrugada)
+        SomaDataEHoraComSLAEHorarioNaoComercial = SomaDataEHoraComSLA + PeriodoDeTempoNaoComercial
+        DataEHoraComSLAPosValidarHorario = SomaDataEHoraComSLAEHorarioNaoComercial
+           
+    Else
+    
+        'Se caiu no horário comercial (Entre 08:00:00hs até as 19:00:00hs) mantém o valor
+        DataEHoraComSLAPosValidarHorario = SomaDataEHoraComSLA
+           
+    End If
+    
+    
+    '_____ 2º Passo: Verifica o dia da semana | Se o dia da semana for sabado ou domingo soma mais horas para que o SLA fique em um dia da semana
+    'Atribui a variável o número do dia da semana
+    DiaDaSemana = Weekday(DataEHoraComSLAPosValidarHorario, vbSunday)
+    
+    'Se o dia da semana é igual a 7 significa que o SLA vai "cair" em um sábado
+    If DiaDaSemana = 7 Then
+        
+        'O SLA caiu em e um sábado | Precisamos que seja apenas em dias comerciais (segunda à sexta) _
+            portanto é necessário somar a data e hora atual + 48hs (24hs sabado | 24hs domingo)
+        PeriodoDeTempoSabado = CDate("48:00:00")
+        DataEHoraComSLAPosValidarDiaDaSemana = DataEHoraComSLAPosValidarHorario + PeriodoDeTempoSabado
+        
+        'Formata os valores e atribui as variáveis os dados que serão inseridos na tabela
+        DataVencimentoSLA = Format(DataEHoraComSLAPosValidarDiaDaSemana, "dd/mm/yyyy")
+        HoraVencimentoSLA = Format(DataEHoraComSLAPosValidarDiaDaSemana, "hh:mm:ss")
+        
+    'Se o dia da semana é igual a 1 significa que o SLA vai "cair" em um domingo | Dificilmente vai entrar nessa condição
+    ElseIf DiaDaSemana = 1 Then
+    
+        'O SLA caiu em um domingo | Precisamos que seja apenas em dias comerciais (segunda à sexta) _
+            portanto é necessário somar a data e hora atual + 24hs (24hs domingo)
+        PeriodoDeTempoDomingo = CDate("24:00:00")
+        DataEHoraComSLAPosValidarDiaDaSemana = DataEHoraComSLAPosValidarHorario + PeriodoDeTempoDomingo
+        
+        'Formata os valores e atribui as variáveis os dados que serão inseridos na tabela
+        DataVencimentoSLA = Format(DataEHoraComSLAPosValidarDiaDaSemana, "dd/mm/yyyy")
+        HoraVencimentoSLA = Format(DataEHoraComSLAPosValidarDiaDaSemana, "hh:mm:ss")
+    
+    Else
+    
+        'Se não caiu em um sábado ou domingo atribui os valores sem adição de tempo
+        DataVencimentoSLA = Format(DataEHoraComSLAPosValidarHorario, "dd/mm/yyyy")
+        HoraVencimentoSLA = Format(DataEHoraComSLAPosValidarHorario, "hh:mm:ss")
+    
+    End If
+    
+    'Atualiza o campo da tabela com a data e hora baseada no SLA
+    DoCmd.RunSQL "UPDATE TBL_NOVAS_PROPOSTAS SET DATA_VENCIMENTO = '" & DataVencimentoSLA & "', HORA_VENCIMENTO = '" & HoraVencimentoSLA & "' " & _
+    "WHERE PROPOSTA = '" & Proposta & "' AND FILA = '" & Fila & "'"
+    
+    'Vai para a próxima linha da tabela
+    rstTabelaNovasPropostas.MoveNext
+Loop
+
+'Fecha a conexão com a tabela auxiliar
+rstTabelaNovasPropostas.Close
+
+
+Set rstTabelaNovasPropostas = Nothing
+
+End Sub
+
+
+'Modulo Descrição Tarefa
+
+Option Compare Database
+
+Public NomeDoCliente As String
+Public NomeDaAutomacao As String
+Public Peridiocidade As String
+Public InicioDoProcessamento  'Variável para mensurar o tempo de processamento
+Public DataInicioDoProcessamento 'Variável para mensurar o tempo de processamento
+Public Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As LongPtr) ' Método de tempo de espera Sleep
+
+
+
+Public Sub ExtrairDescricaoTarefaDaWeb()
+'_____ Preenche a coluna da DESCRICAO_TAREFA | No arquivo original(Excel)está no módulo MSubstatusVP
+'Tempo de processamento: __ minutos
+
+'Declara as variáveis locais
+Dim HTML As HTMLDocument
+Dim Fila As Variant
+Dim Proposta As Variant
+Dim ProdutoWeb As Variant
+Dim DescricaoTarefa As Variant
+Dim rstTabelaNovasPropostas As DAO.Recordset
+
+
+
+'Tratamento de erro
+On Error Resume Next
+
+
+
+'_____________________________ CAPTURA O PROCESSAMENTO DA AUTOMAÇÃO _____________________________
+ExtrairDescricaoTarefa.InicioDoProcessamento = Timer
+DataInicioDoProcessamento = Now
+
+
+
+'__________________________ ROTINA PRINCIPAL __________________________
+'Acessando a página do Itau
+'Vai para a página onde os dados serão consultados - HOME > IMOBFONE > IMOBFONE
+Rotina.Navegador.Navigate2 Url:="https://ww39.itau.com.br/vp/controleDocumentos.do?m=inicio", TargetFrameName:=auto
+
+'Exibe o navegador (Essa ação faz com que o navegador está oculto apareça)
+Rotina.Navegador.Visible = True
+
+Sleep (7000) 'Aguarda 7 segundos antes de continuar
+
+'_____Consultando os dados da página de PRODUTOS
+Do While Rotina.Navegador.Busy And Rotina.Navegador.ReadyState <> READYSTATE_COMPLETE: DoEvents: Loop
+
+'Atribui a variável os elementos da tabela de propostas
+Set rstTabelaNovasPropostas = CurrentDb.OpenRecordset("SELECT * FROM TBL_NOVAS_PROPOSTAS")
+
+'Itera sobre a tabela de propostas
+Do While rstTabelaNovasPropostas.EOF = False
+    
+    'Se o campo descrição da tarefa da tabela estiver vazio ou nulo entra nessa condição
+    If IsEmpty(rstTabelaNovasPropostas("DESCRICAO_TAREFA").Value) = True Or IsNull(rstTabelaNovasPropostas("DESCRICAO_TAREFA").Value) = True Then
+        
+        '_____________________________ ATRIBUI VALOR AS VARIÁVEIS _____________________________
+        Proposta = rstTabelaNovasPropostas("PROPOSTA")
+        Fila = rstTabelaNovasPropostas("FILA")
+        DataProposta = rstTabelaNovasPropostas("DATA")
+        HoraProposta = rstTabelaNovasPropostas("HORA")
+        
+        'Atribui ao campo de busca do navegador o número da proposta | Remove o espaço vazio
+        Rotina.Navegador.Document.getElementsByTagName("input")(1).Value = Trim(Proposta)
+        Do While Rotina.Navegador.Busy And Rotina.Navegador.ReadyState <> READYSTATE_COMPLETE: DoEvents: Loop
+        
+        Sleep (2000) 'Aguarda 2 segundos antes de continuar
+        
+        'Clica no botão com a imagem
+        Rotina.Navegador.Document.getElementsByclassName("button")(0).Click
+        Do While Rotina.Navegador.Busy And Rotina.Navegador.ReadyState <> READYSTATE_COMPLETE: DoEvents: Loop
+        
+        Sleep (2000) 'Aguarda 2 segundos antes de continuar
+        
+        'Clica no botão que tem um link
+        Rotina.Navegador.Document.getElementsByclassName("tableLink")(0).Click
+        Do While Rotina.Navegador.Busy And Rotina.Navegador.ReadyState <> READYSTATE_COMPLETE: DoEvents: Loop
+        
+        Sleep (2000) 'Aguarda 2 segundos antes de continuar
+        
+        'Atribui a variável o nome do produto
+        DescricaoTarefa = Trim(Replace(Replace(Replace(Navegador.Document.getElementsByclassName("bigField")(2).Innertext, " Fase", ""), Chr(10), ""), Chr(13), ""))
+        Produto = Trim(Replace(Replace(Replace(Navegador.Document.getElementsByclassName("bigField")(3).Innertext, " Produto", ""), Chr(10), ""), Chr(13), ""))
+        ProdutoWeb = Trim(Replace(Produto, "Produto ", ""))
+        
+        Do While Rotina.Navegador.Busy And Rotina.Navegador.ReadyState <> READYSTATE_COMPLETE: DoEvents: Loop
+        
+        'Atualiza o campo da tabela correspondente com a descrição da tarefa
+        DoCmd.RunSQL "UPDATE TBL_NOVAS_PROPOSTAS SET DESCRICAO_TAREFA = '" & DescricaoTarefa & "' WHERE PROPOSTA = '" & Proposta & "' AND FILA = '" & Fila & "' AND HORA = '" & HoraProposta & "'AND DATA = '" & DataProposta & "'"
+          
+        'Atualiza o campo da tabela correspondente com o nome do produto
+        DoCmd.RunSQL "UPDATE TBL_NOVAS_PROPOSTAS SET PRODUTO = '" & ProdutoWeb & "' WHERE PROPOSTA = '" & Proposta & "' AND FILA = '" & Fila & "' AND HORA = '" & HoraProposta & "'AND DATA = '" & DataProposta & "'"
+          
+    End If
+    
+    'Vai para a próxima linha da tabela
+    rstTabelaNovasPropostas.MoveNext
+Loop
+
+Sleep (3000) 'Aguarda 3 segundos antes de continuar
+
+'Fecha o navegador
+Rotina.Navegador.Quit
+
+'Fecha a conexão com a tabela auxiliar
+rstTabelaNovasPropostas.Close
+
+
+
+'_____________________________ LIMPA VARIÁVEIS _____________________________
+Set rstTabelaNovasPropostas = Nothing
+Set Rotina.Navegador = Nothing
+
+End Sub
+
+
+'Modulo EmailsAnalistas
+Option Compare Database
+
+Public NomeAnalista As String
+
+
+
+Public Sub FiltraConsultaPorAnalistaEEnviaEmail(CaminhoLocal As String, CaminhoRede As String)
+
+'Declara variáveis locais
+Dim NomeArquivo As String
+Dim ArquivoAnexo As String
+Dim BancoDados As DAO.Database
+Dim qdfConsultaPorAnalistas As DAO.QueryDef
+Dim rstIdentificaEmailsAnalistas As DAO.Recordset
+
+
+
+'_____________________________ ATRIBUI VALOR AS VARIÁVEIS LOCAIS _____________________________
+Set BancoDados = CurrentDb()
+Set qdfConsultaPorAnalistas = BancoDados.QueryDefs("CONSULTA_POR_ANALISTA")
+Set rstIdentificaEmailsAnalistas = CurrentDb.OpenRecordset("SELECT DISTINCT RESPONSAVEL FROM TBL_NOVAS_PROPOSTAS")
+    
+
+  
+'_____________________________ ROTINA PRINCIPAL _____________________________
+'Itera sobre a consulta para retornar o email de cada um dos analistas
+While Not rstIdentificaEmailsAnalistas.EOF
+
+
+    'Se for nulo ou vazio vai para o próximo registro da tabela
+    If rstIdentificaEmailsAnalistas!Responsavel <> "SEM RESPONSAVEL" And VarType(rstIdentificaEmailsAnalistas!Responsavel) = vbNull Or VarType(rstIdentificaEmailsAnalistas!Responsavel) = vbEmpty Then rstIdentificaEmailsAnalistas.MoveNext
+
+    'Atribui a variável o nome do analista que será usada no arquivo que será salvo e envio e no e-mail
+    NomeAnalista = StrConv(Replace(Replace(rstIdentificaEmailsAnalistas!Responsavel, "@pd.tec.br", ""), ".", " "), vbProperCase)
+    
+    'Se não estiver vazio vai fazer o processo e enviar o e-mail
+    If NomeAnalista <> "Sem Responsavel" And NomeAnalista <> "" And IsEmpty(NomeAnalista) = False Then
+    
+    
+        'Executa a consulta SQL para atualizar seus dados | Observação: Ao abrir a consulta seus dados são atualizados automaticamente
+        DoCmd.OpenQuery qdfConsultaPorAnalistas.Name, acViewNormal, acReadOnly
+        
+        'Faz o filtro na consulta SQL
+        DoCmd.SetFilter qdfConsultaPorAnalistas.Name, "RESPONSAVEL = '" & rstIdentificaEmailsAnalistas!Responsavel & "'"
+        
+        
+        '_____________________________ EXPORTA ARQUIVO _____________________________
+        'Atribui a variável o nome do arquivo
+        NomeArquivo = "Itau_Novas_Propostas-" & NomeAnalista & "-" & Rotina.GrupoFila & "_" & Format(Now(), "yyyymmddhhmm") & ".xlsx"
+            
+        'Se o arquivo já existe será removido dando lugar a versão atualizada
+        Call Mdl_Funcoes.RemoveArquivoExistente(CaminhoRede, NomeArquivo)
+        
+        'Exporta os dados da consulta "EXPORT_TBL_LOCAL" utilizando o assistente de exportação
+        DoCmd.RunSavedImportExport ("EXPORT_CONSULTA_POR_ANALISTA")
+            
+        '_____ Aguarda 3 segundos antes de ir para a próxima etapa
+        Rotina.Sleep (3000)
+            
+        'Procura o arquivo na pasta informa e renomeia salvando (Recorta e cola) na pasta destino na rede
+        Name CaminhoLocal & "CONSULTA_POR_ANALISTA.xlsx" As CaminhoRede & NomeArquivo
+        
+        'Atribui a variável o caminho e nome do arquivo que será enviado
+        ArquivoAnexo = CaminhoRede & NomeArquivo
+        
+        
+        '__________________________ ENVIO DO EMAIL __________________________
+        Call EnviarEmailsAnalistas.EnviaEmailPadrao("relatorios@pd.tec.br", rstIdentificaEmailsAnalistas!Responsavel, "Itaú | Confirmação de Valores | " & NomeAnalista & " | " & Date, , ArquivoAnexo)
+        
+        '_____ Aguarda 20 segundos antes de ir para a próxima etapa
+        Rotina.Sleep (20000)
+        
+        
+        '_____________________________ FECHA A CONSULTA _____________________________
+        'Fecha a consulta salvando a ordenação
+        DoCmd.Close acQuery, qdfConsultaPorAnalistas.Name, acSaveYes
+    
+    End If
+    
+    'Vai para o próximo registro da tabela
+    rstIdentificaEmailsAnalistas.MoveNext
+    
+Wend
+
+
+
+'_____________________________ FECHA AS CONSULTAS _____________________________
+BancoDados.Close
+qdfConsultaPorAnalistas.Close
+rstIdentificaEmailsAnalistas.Close
+
+
+
+'_____________________________ LIMPA AS VARIÁVEIS LOCAIS _____________________________
+Set BancoDados = Nothing
+Set qdfConsultaPorAnalistas = Nothing
+Set rstIdentificaEmailsAnalistas = Nothing
+
+End Sub
+
+
+
+Public Sub EnviaEmailPadrao(EmailRemetente, EmailDestinatarios, AssuntoEmail As Variant, Optional EmailsEmCopia = "", Optional Anexo = "", Optional EmailsEmCopiaOculta = "")
+'_____ Envia um e-mail com base nos parâmetros passados
+
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+
+EmailsEmCopia = "camila.carvalho@pd.tec.br; patricia.silva@pd.tec.br"
+EmailsEmCopiaOculta = "tatiane.vivas@pd.tec.br; tiago.goulart@pd.tec.br"
+
+'EmailDestinatarios = "tiago.goulart@pd.tec.br"
+'EmailsEmCopia = "tiago.goulart@pd.tec.br"
+'EmailsEmCopiaOculta = "tiago.goulart@pd.tec.br"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "email-smtp.sa-east-1.amazonaws.com"
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "AKIA5LJIINH7JMPUPQYP" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "BDEjqgWtpYbBrJtWIwj5Ej23ySbz4h36d6WjgdW9UCG3" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .FROM = EmailRemetente 'Quem envia a mensagem
+    .To = EmailDestinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    If IsEmpty(Anexo) = False And Anexo <> "" Then .AddAttachment (Anexo) 'Caminho do arquivo + nome do arquivo que será anexado
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "" & NomeAnalista & ", " & StrConv(SaldacaoParaEmails, vbLowerCase) & ".<br><br>" & _
+                "Realizem sempre despachos claros, objetivos e com data prevista.<br>" & _
+                "<ul>" & _
+                    "<li>PDVs com mais de 5 dias ( que serão tratadas diretamente com o cliente) devem ser <b>atuadas no mínimo 3 vezes ao dia</b>;</li>" & _
+                    "<li>Propostas de <b>PDV destro do SLA</b> devem ser <b>enviadas e-mail</b>, e ao menos <b>uma reiteração</b>;</li>" & _
+                    "<li><b>Propostas de aquisição a vista devem ser tratadas de acordo com o procedimento padrão</b>, envio de e-mail e uma reiteração se necessário.</li>" & _
+                "</ul>" & _
+                "<b>Consolidação deve ser devolvida até as 17:00.</b><br>" & _
+                "<b>Por favor seguir os templates padrão:</b><br>" & _
+                "<ul>" & _
+                    "<li>Aprovada</li><li>Alteração de Taxa</li><li>Alteração de valores</li>" & _
+                    "<li>Alteração de Prazo</li><li>Reanalise</li><li>Proposta suspensa</li>" & _
+                    "<li>Proposta Cancelada</li><li>Aguardando de acordo- minuta valores</li><li>Revisão de laudo</li>" & _
+                    "<li>Documento pendente</li><li>Solicitado auxílio da preposta</li><li>Cliente solicita retorno em...</li>" & _
+                    "<li>PDV solicita retorno em...</li><li>Correção da minuta</li><li>Outra BPO</li>" & _
+                    "<li>Cliente pediu para tratar com o PDV</li><li>PDV pediu para não ligar para o cliente, prazo para resposta em ***</li><li>Cliente contatado solicitou retorno em xxxxxx enviado minuta para validação.</li>" & _
+                "</ul>" & _
+                "<br>" & _
+                "Anexo as propostas para atuação." & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
+
