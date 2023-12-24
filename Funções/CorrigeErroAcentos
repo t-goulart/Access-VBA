@@ -1,0 +1,73 @@
+Public Function CorrigeErroAcentos(Palavra As String) As String
+' Habilitar Microsoft Scripting Runtime
+' A função faz um laço que vai "ler" as chaves do dicionário e comparar os erros de acentuação, localizando o erro, retorna a acentuação correta
+
+' Declaração das variáveis
+Dim Dict As New Dictionary
+
+On Error Resume Next
+
+' Atribuição dos valores ao dicionário
+With Dict
+    ' Definie o modo como as informação são comparadas (Comparação por texto)
+    .CompareMode = TextCompare
+    ' Primeira coluna KEY | Segunda coluna ITEM
+    .Add Key:="Ã‡", Item:="Ç"
+    .Add Key:="Ãˆ", Item:="È"
+    .Add Key:="ú¿", Item:="Ú"
+    .Add Key:="Ã‡", Item:="Ç"
+    .Add Key:="Ãˆ", Item:="È"
+    .Add Key:="Ã‰", Item:="É"
+    .Add Key:="ÃŠ", Item:="Ê"
+    .Add Key:="Ã‹", Item:="Ë"
+    .Add Key:="ÃŒ", Item:="Ì"
+    .Add Key:="ÃŽ", Item:="Î"
+    .Add Key:="Ã‘", Item:="Ñ"
+    .Add Key:="Ã’", Item:="Ò"
+    .Add Key:="Ã“", Item:="Ó"
+    .Add Key:="Ã”", Item:="Ô"
+    .Add Key:="Ã•", Item:="Õ"
+    .Add Key:="Ã–", Item:="Ö"
+    .Add Key:="Ã™", Item:="Ù"
+    .Add Key:="Ãš", Item:="Ú"
+    .Add Key:="Ã›", Item:="Û"
+    .Add Key:="Ãœ", Item:="Ü"
+    .Add Key:="Ã¡", Item:="á"
+    .Add Key:="Ã¢", Item:="â"
+    .Add Key:="Ã£", Item:="ã"
+    .Add Key:="Ã¤", Item:="ä"
+    .Add Key:="Ã¥", Item:="å"
+    .Add Key:="Ã§", Item:="ç"
+    .Add Key:="Ã¨", Item:="è"
+    .Add Key:="Ã©", Item:="é"
+    .Add Key:="Ãª", Item:="ê"
+    .Add Key:="Ã«", Item:="ë"
+    .Add Key:="Ã¬", Item:="ì"
+    .Add Key:="Ã­", Item:="í"
+    .Add Key:="Ã®", Item:="î"
+    .Add Key:="Ã¯", Item:="ï"
+    .Add Key:="Ã°", Item:="ð"
+    .Add Key:="Ã±", Item:="ñ"
+    .Add Key:="Ã²", Item:="ò"
+    .Add Key:="Ã³", Item:="ó"
+    .Add Key:="Ã´", Item:="ô"
+    .Add Key:="Ãµ", Item:="õ"
+    .Add Key:="Ã¶", Item:="ö"
+    .Add Key:="Ã¹", Item:="ù"
+    .Add Key:="Ãº", Item:="ú"
+    .Add Key:="Ã»", Item:="û"
+    .Add Key:="Ã¼", Item:="ü"
+    .Add Key:="Ã", Item:="ú"
+    .Add Key:="Ã¿", Item:="Ú"
+    .Add Key:="Âº", Item:="º"
+    .Add Key:="ú¿", Item:="Ú"
+End With
+
+' For: O laço vai interar sobre as chaves do dicionário e salvar dentro da variável "acento"
+For Each acento In Dict.Keys
+    ' If: Se o erro de acento (variável) foi localizado na variável passada como parâmentro _
+        Replace: Procura na palavra o acento, Dict retorna a acentuação correta de acordo com o acento (iterado lá no inicio com o For)
+    If InStr(Palavra, acento) > 0 Then CorrigeErroAcentos = Replace(Palavra, acento, Dict.Item(acento)) Else CorrigeErroAcentos = Palavra: Exit Function
+Next acento
+
+End Function
