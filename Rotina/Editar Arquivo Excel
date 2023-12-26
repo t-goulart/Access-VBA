@@ -2,6 +2,7 @@
 'Pode não ser completamente útil para você, mas a estrutura sim, apenas adapte para a sua necessidade
 
 Public Sub EditaTabelasArquivoExcel(CaminhoRede As String, NomeAbaArquivo As String, NomeArquivo As String, Coluna As Integer, PalavraChave As String)
+'Antes de testar vá em Ferramentas > Referências e selecione: Microsoft Scripting Runtime e Microsoft Excel 16.0 Object Library
 'Faz a edição visual das células de uma tabela
 
 'Declara variáveis locais
