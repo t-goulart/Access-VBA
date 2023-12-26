@@ -1,0 +1,16 @@
+'A rotina abaixo serve para compactar e reparar o Access
+'Ñ tente depurar esse código pois ñ é possível fazer esse processo
+'Aplique este código antes de encerrar a macro para que desta forma o arquivo possa ser reparado antes de fechar
+Public Sub CompactarRepararBancoDeDados()
+
+'Declara variável local
+Dim ArquivoComBancoDados As String
+    
+'Atribui a variável o caminho atual e o nome do arquivo Access
+ArquivoComBancoDados = CurrentProject.FullName
+
+'Passa como parametro o caminho e nome do arquivo a ser reparado e compactado
+'Neste caso estou passando o mesmo parametro duas vezes, pois ñ vou salvar uma cópia, mas "substituir" o atual
+DAO.DBEngine.CompactDatabase ArquivoComBancoDados, ArquivoComBancoDados
+
+End Sub
