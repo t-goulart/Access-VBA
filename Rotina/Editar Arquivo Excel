@@ -1,0 +1,98 @@
+'A estrutura abaixo pinta a cor das células que contém uma palavra específica
+'Pode não ser completamente útil para você, mas a estrutura sim, apenas adapte para a sua necessidade
+
+Public Sub EditaTabelasArquivoExcel(CaminhoRede As String, NomeAbaArquivo As String, NomeArquivo As String, Coluna As Integer, PalavraChave As String)
+'Faz a edição visual das células de uma tabela
+
+'Declara variáveis locais
+Dim rng As Range
+Dim Celula As Range
+
+ 
+Dim Excel_WB As Excel.Workbook
+Dim Excel_WS As Excel.Worksheet
+Dim QtdeLinhasDaTabela As Integer
+Dim Excel_App As New Excel.Application
+
+
+
+'_____________________________ ROTINA PRINCIPAL _____________________________
+'Exibe o arquivo
+Excel_App.Visible = True
+
+'Ativa/Desativa os alertas
+Excel_App.EnableEvents = False
+
+'Abre o arquivo para atualizar seus dados
+Set Excel_WB = Excel_App.Workbooks.Open(CaminhoRede & NomeArquivo)
+
+'Atribui a aba para o arquivo focar nela
+Set Excel_WS = Excel_WB.Sheets(NomeAbaArquivo)
+
+'Foca para a aba selecionada
+Excel_WS.Select
+
+'Apaga todas as informações da aba se tem dados na célula A2
+If IsEmpty(Excel_WS.Cells(2, Coluna).Value) = False Then
+
+    'Itera sobre cara uma das células do range informado
+    For Each Celula In Excel_WS.Range(Excel_WS.Cells(2, Coluna), Excel_WS.Cells(Excel_WS.Rows.Count, Coluna).End(xlUp))
+    
+        'Verifica se o conteúdo da célula contém a palavra-chave
+        If InStr(1, Celula.Value, PalavraChave, vbTextCompare) > 0 Then
+        
+            Celula.Font.Color = RGB(139, 0, 0)  ' Vermelho Escuro
+            Celula.Interior.Color = RGB(255, 192, 203) ' Rosa Claro
+
+        End If
+        
+    'Vai para a próxima célula
+    Next Celula
+
+End If
+
+'Seleciona todas as células da aba ativa
+Excel_WS.Cells.Select
+  
+'Ajusta a largura das colunas para o tamanho do conteúdo
+Excel_WS.Cells.EntireColumn.AutoFit
+    
+'Ajusta a altura das linhas para o tamanho do conteúdo
+Excel_WS.Cells.EntireRow.AutoFit
+
+'Renomeia a aba antes de salvar como uma cópia
+Excel_WS.Name = NomeAbaArquivo
+
+'Seleciona a primeira célula da aba
+Excel_WS.Range("A1").Select
+
+'Atualiza tudo
+Excel_WB.RefreshAll
+
+
+
+'_____________________________  ENCERRA O PROCESSO _____________________________
+'Salva o arquivo
+Excel_WB.Save
+
+'Fecha o arquivo
+Excel_WB.Close
+
+'Ativa/Desativa os alertas
+Excel_App.EnableEvents = True
+
+'Exibe o arquivo
+Excel_App.Visible = False
+
+
+
+'_____________________________  ENCERRA O EXCEL _____________________________
+Excel_App.Quit
+
+
+
+'_____________________________  LIMPA AS VARIÁVEIS _____________________________
+Set Excel_WB = Nothing
+Set Excel_App = Nothing
+
+End Sub
