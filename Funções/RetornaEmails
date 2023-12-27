@@ -1,0 +1,46 @@
+Public Function RetornaEmails(BaseDeDados As String, CampoComEmails As String, CampoParaComparacao As String, VariavelComparacao As Variant, Optional Tipo As String)
+'_____ Procura e-mails de um mesmo usuário em uma base de dados, baseado em uma informação passada nos parâmetros | Retorna todos os e-mails do usuário X baseado no seu ID, cnpj, cpf e etc.
+'_____ Atribua o valor dessa função a uma variável, exemplo:
+  'EmailRemetente = Mdl_Emails.RetornaEmails("*** TABELA ***", "*** CAMPO COM O EMAIL ***", "*** CAMPO COM ID ***", *** PROCURE ESSE ID ***, "FROM")
+  'EmailsDestinatarios = Mdl_Emails.RetornaEmails("*** TABELA ***", "*** CAMPO COM O EMAIL ***", "*** CAMPO COM ID ***", *** PROCURE ESSE ID ***, "TO")
+  'EmailsEmCopia = Mdl_Emails.RetornaEmails("*** TABELA ***", "*** CAMPO COM O EMAIL ***", "*** CAMPO COM ID ***", *** PROCURE ESSE ID ***, "CC")
+  'EmailsEmCopiaOculta = Mdl_Emails.RetornaEmails("*** TABELA ***", "*** CAMPO COM O EMAIL ***", "*** CAMPO COM ID ***", *** PROCURE ESSE ID ***, "BCC")
+'_____ IMPORTANTE: É mais eficaz criar uma tabela com os campos ID, NOME, EMAIL e TIPO (FROM - Rementente, TO, Destinatários, CC - Cópia e BCC - Cópia Oculta)
+
+' Declaração das variáveis
+Dim Emails As String
+Dim rstEmail As DAO.Recordset
+
+' Limpa as variáveis
+Emails = ""
+Set rstEmail = Nothing
+
+'Se o campo Tipo de e-mail estiver vazio entra nessa condição
+If IsNull(Tipo) = True Then
+
+    ' Seleciona na base informada os dados conforme o campo de comparação informado
+    Set rstEmail = CurrentDb.OpenRecordset("SELECT " & CampoComEmails & " FROM " & BaseDeDados & " WHERE " & CampoParaComparacao & " = '" & VariavelComparacao & "'")
+
+ElseIf IsNull(Tipo) = False Then
+    
+    ' Seleciona na base informada os dados conforme o campo de comparação informado
+    Set rstEmail = CurrentDb.OpenRecordset("SELECT " & CampoComEmails & " FROM " & BaseDeDados & " WHERE " & CampoParaComparacao & " = '" & VariavelComparacao & "' AND TIPO = '" & Tipo & "' AND STATUS = 'ATIVO'")
+
+End If
+
+
+' Itera sobre os registros da tabela | Se o EOF = True significa que ñ tem registro
+Do While rstEmail.EOF = False
+    ' Se tem informação no registro retorna false e entra nessa condição
+    If rstEmail.EOF = False Then
+        ' A variável vai receber a concatenação dos e-mails localizados com base informada
+         Emails = Emails & rstEmail(CampoComEmails) & ";"
+        ' Vai para o próximo registro
+        rstEmail.MoveNext
+    End If
+Loop
+
+' Atribui os e-mails localizados para a função
+RetornaEmails = Emails
+
+End Function
