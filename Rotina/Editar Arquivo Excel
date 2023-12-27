@@ -5,6 +5,10 @@ Public Sub EditaTabelasArquivoExcel(CaminhoRede As String, NomeAbaArquivo As Str
 'Antes de testar vá em Ferramentas > Referências e selecione: Microsoft Scripting Runtime e Microsoft Excel 16.0 Object Library
 'Faz a edição visual das células de uma tabela
 
+'Chama a sub rotina | Edita células específicas de uma coluna que contenham uma palavra específica
+'Call EditaTabelasArquivoExcel(CaminhoRede, "*** NOME DA ABA ***", *** NOME DO ARQUIVO ***, *** NUMERO DA COLUNA ***, "*** PALAVRA QUE SERÁ DESTACADA ***")
+        
+
 'Declara variáveis locais
 Dim rng As Range
 Dim Celula As Range
