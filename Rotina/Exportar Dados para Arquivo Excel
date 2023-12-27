@@ -2,6 +2,10 @@ Public Function ExportaTabelasArquivoExcel(NomeDaConsulta As Variant, CaminhoRed
 'Antes de testar vá em Ferramentas > Referências e selecione: Microsoft Scripting Runtime e Microsoft Excel 16.0 Object Library
 'Esta rotina tem como objetivo substituir dados do Access em um arquivo Excel existente, apagando os dados atuais (Sem remover os títulos) e inserindo novos dados
 
+'Chama a sub rotina | Atualiza dados de um arquivo existente
+'Call ExportaTabelasArquivoExcel(*** TABELA ***, CaminhoRede, NomeArquivo, "NOME DA ABA", "NOME DO ARQUIVO")
+        
+
 'Declara variáveis locais
 Dim CaminhoLocal As String
 Dim rstDados As DAO.Recordset
