@@ -1,0 +1,129 @@
+' Essa sub rotina cria uma tabela no corpo do e-mail, com colunas e linhas e permite mudar a cor do título e células
+' A tabele é DINÂMICA! Ñão importa a quantidade de linhas ou colunas
+'Copie a variável GLOBAL strHTMLTabela e cole no corpo do seu e-mail (CONSULTE O FINAL DESTE CÓDIGO)
+
+'Declara essa variável como gloval
+Public strHTMLTabela As String
+
+
+'Declara as variáveis locais
+Dim rstTabela As DAO.Recordset
+
+'Limpa a variável
+Set rstTabela = Nothing
+
+        '__________________________ TABELA __________________________
+        'Atribui a variável o resultado da consulta criada
+        Set rstTabela = CurrentDb.OpenRecordset("*** SUA TABELA OU CONSULTA ***")
+        
+        'Cria a tabela que vai no corpo do e-mail
+        If Not rstTabela.EOF Then
+        
+            'Inicializa a string HTML com a tag da tabela
+            strHTMLTabela = "<table border='1' bordercolor=black>" & vbNewLine
+        
+            'Abre a primeira linha para o cabeçalho (TAG tr)
+            strHTMLTabela = strHTMLTabela & "<tr border='1' bordercolor=black>" & vbNewLine
+        
+            'Itera sobre os campos da consulta para criar o cabeçalho da tabela
+            For Each Campo In rstTabela.Fields
+                'Altere o RGB para mudar a cor do cabeçalho da sua tabela virtual
+                strHTMLTabela = strHTMLTabela & "<th style='color: white; background-color: rgb(88, 89, 81);' border='1' bordercolor='black'><center>" & Campo.Name & "</center></th>" & vbNewLine
+            Next Campo
+        
+            'Fecha a linha do cabeçalho
+            strHTMLTabela = strHTMLTabela & "</tr>" & vbNewLine
+        
+            'Itera sobre os registros da consulta para criar as linhas da tabela
+            Do While Not rstTabela.EOF
+                'Abre uma nova linha para cada registro (TAG tr)
+                strHTMLTabela = strHTMLTabela & "<tr border='1' bordercolor=black>" & vbNewLine
+        
+                'Itera sobre os campos do registro para criar as células
+                For Each Campo In rstTabela.Fields
+                    'Atribui a variável o dado
+                    ValorCelula = Campo.Value
+                    'Se o valor do campo é tipo double ou integer (Numérico) entra na condição para editar o tipo de dado
+                    If VarType(ValorCelula) = vbDouble Or VarType(ValorCelula) = vbInteger Then
+                        strHTMLTabela = strHTMLTabela & "<td border='1' bordercolor=black><center>" & "" & Format(ValorCelula, "R$ 0.00") & "</center></td>" & vbNewLine
+                    Else
+                        strHTMLTabela = strHTMLTabela & "<td border='1' bordercolor=black><center>" & "" & ValorCelula & "</center></td>" & vbNewLine
+                    End If
+                Next Campo
+        
+                'Fecha a linha do registro
+                strHTMLTabela = strHTMLTabela & "</tr>" & vbNewLine
+        
+                'Vai para o próximo registro
+                rstTabela.MoveNext
+            Loop
+        
+            'Fecha a tabela HTML
+            strHTMLTabela = strHTMLTabela & "</table>" & vbNewLine
+        End If
+        
+        'Fechando o registroset
+        rstTabela.Close
+
+
+'__________________________________________________________________________________________
+'Exemplo de aplicação da tabela no corpo do e-mail 
+'Abaixo uma rotina padrão para envio de e-mail que você pode chamar (Call) no seu código principal
+
+Public Sub EnviaEmail(Remetente, Destinatarios, AssuntoEmail As Variant, Optiona EmailsEmCopia As String, Optional EmailsEmCopiaOculta As String, Optional Anexo As Variant)
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 25
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "" 'Seu servidor de e-mail
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = Remetente 'Quem envia a mensagem
+    If IsEmpty(Destinatarios) = False And Destinatarios <> "" Then .To = Destinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    'Expande a lista de anexos para retornar um a um e incluir no envio | Permite incluir vários anexos
+    For indice = LBound(Anexo) To UBound(Anexo)
+        'Caminho do arquivo + nome do arquivo que será anexado
+        If IsEmpty(Anexo(indice)) = False And Anexo(indice) <> "" Then .AddAttachment (Anexo(indice))
+    Next indice
+    .Subject = " " & AssuntoEmail & " "
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem?" & _
+                "<br><br>" & _
+                "<i>A tabela abaixo contém os dados do relatório X</i>" & _
+                "<br>" & _
+                    "" & strHTMLTabela & "" & _
+                "<br><br>" & _
+                "Atenciosamente.<br>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
