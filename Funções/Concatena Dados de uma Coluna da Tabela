@@ -1,0 +1,53 @@
+'Exemplo de aplicação da função | Aplicado dentro de uma consulta do Access
+'SELECT T.ID, T.NOME, ConcatenaDadosTabela("EMAIL", "TABELA_EMAIL", "ID = '" & T.ID & "'") AS EMAIL
+'FROM TABELA_BASE AS T
+'ORDER BY T.NOME;
+
+
+Public Function ConcatenaDadosTabela(ByVal Coluna As String, ByVal Tabela As String, Optional ByVal Criterio As String = "", Optional ByVal Delimitador As String = ", ") As String
+'Função para concatenar dados de uma coluna específica de uma tabela específica com base em critérios
+'_____ Coluna: Coluna que contem os dados que vamos concatenar
+'_____ Tabela: Tabela que contém a coluna que vamos concatenar seus dados
+'_____ Criterio: Critério para concatenar os dados da coluna. Exemplo: Concatene todos os emails do Usuario com ID X
+'_____ Delimitador: Qual delimintador vai usar para separar os dados
+
+'Declara as variáveis locais
+Dim rsConsulta As DAO.Recordset
+Dim ConsultaLocal As String
+
+'Atribui a variável a consulta que vamos fazer na tabela informada
+ConsultaLocal = "SELECT " & Coluna & " FROM " & Tabela
+
+'Se tem critério entra nessa condição
+If Criterio <> "" Then ConsultaLocal = ConsultaLocal & " WHERE " & Criterio
+
+'Abre a consulta local
+Set rsConsulta = CurrentDb.OpenRecordset(ConsultaLocal)
+
+'Itera sobre os dados da consulta
+While Not rsConsulta.EOF
+
+    'A cada iteração atribui a função o valor do campo e inclu o delimitador
+    ConcatenaDadosTabela = ConcatenaDadosTabela & rsConsulta.Fields(0).Value & Delimitador
+    
+    'Vai para a próxima linha da consulta
+    rsConsulta.MoveNext
+    
+Wend
+
+
+
+'Se a função tem dados então não retorna o ultimo caractere (Delimitador)
+If Len(ConcatenaDadosTabela) > 0 Then ConcatenaDadosTabela = Left(ConcatenaDadosTabela, Len(ConcatenaDadosTabela) - Len(Delimitador))
+
+
+
+'_____________________________  ENCERRA A CONEXÃO _____________________________
+rsConsulta.Close
+
+
+
+'_____________________________ LIMPA AS VARIÁVEIS LOCAIS _____________________________
+Set rsConsulta = Nothing
+
+End Function
