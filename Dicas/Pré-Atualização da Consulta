@@ -1,0 +1,4 @@
+'_____________________________ PRÉ-ROTINA PRINCIPAL _____________________________
+DoCmd.OpenTable "NOME_DA_CONSULTA", acViewNormal, acReadOnly 'Abre a tabela principal para atualizar seus dados
+Sleep (5000) '_____ Aguarda 5 segundos antes de continuar
+DoCmd.Close acTable, "NOME_DA_CONSULTA", acSaveYes 'Fecha a tabela atualizando a conexão com a rede
