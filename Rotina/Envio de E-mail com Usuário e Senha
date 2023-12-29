@@ -52,19 +52,11 @@ With ConfiguracaoMensagem
     
     .Subject = "" & AssuntoEmail & ""
     'Corpo do e-mail | Mensagem está sendo formatada como HTML
-    .HTMLBody = "Olá, tudo bem? <br><br>" & _
-                "Segue fila de trabalho para atuação nesta data. <br>" & _
-                "Solicitamos que seja priorizado os casos vencidos, caso haja. <br><br>" & _
-                "O histórico com os demais arquivos está disponível em: <br>" & _
-                "<a href='" & C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.CaminhoRede & "'>" & C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.CaminhoRede & "</a>" & _
+    .HTMLBody = "Olá, tudo bem?" & _
                 "<br><br>" & _
-                "" & C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.MensagemArquivoAcimaDoTamanhoLimite & "" & _
-                "<br>" & _
-                "Em caso de dúvidas, favor entrar em contato com nosso Planejamento Estratégico." & _
+                "Segue o relatório X referente a data atual. <br>" & _
                 "<br><br>" & _
-                "À disposição.<br>" & _
-                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
-                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+                "À disposição.<br>"
     Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
     .send 'Send faz o envio do e-mail
 End With
