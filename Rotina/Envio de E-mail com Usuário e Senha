@@ -1,0 +1,76 @@
+'Essa rotina contém uma estrutura para envio de e-mail que exige usuário e senha
+'Chame a rotina usando o Call passando os parâmetros solicitados
+'Exemplo:
+            'Atribui o anexo ao array para poder enviar um ou mais anexos
+            'Anexos = Array(ArquivoAnexo)
+            'Envia o email com base na tabela de Emails localizada na pasta E:\PDTec_Automacoes_Monitoramento
+            'Call EnviaEmail("remetente@remetente.com.br","destinatario@destinatario.com.br"," Relatorio X do departamento Y | " & Date, Anexos, "", ")
+
+
+Public Sub EnviaEmail(EmailRemetente As String, EmailsDestinatarios As String, AssuntoEmail As Variant, Optional EmailsEmCopia As String, Optional EmailsEmCopiaOculta As String, Optional Anexo = "")
+'_____ Envia um e-mail com base nos parâmetros passados
+
+'Declaração das variáveis
+Dim ConfiguracaoServidor
+Dim ConfiguracaoMensagem
+
+'Atribui a variável os atributos de um objeto que permite configurar uma conexão com servidor
+Set ConfiguracaoServidor = CreateObject("CDO.Configuration")
+'Atribui a variável os atributos de um objeto que permite enviar um envio de e-mail
+Set ConfiguracaoMensagem = CreateObject("CDO.Message")
+'Atribui a variável o link do servidor web da microsoft
+schema = "http://schemas.microsoft.com/cdo/configuration/"
+
+'Configura a conexão com servidor para permitir o envio de e-mail através da porta 587
+With ConfiguracaoServidor.Fields
+    .Item(schema & "sendusing") = 2 'Configuramos o tipo de cliente. 2 indica uso do Outlook
+    .Item(schema & "smtpserver") = "" 'Servidor de e-mail
+    .Item(schema & "smtpserverport") = 25 'Número da porta
+    .Item(schema & "smtpusessl") = True 'Desabilita ou Habilita mensagem segura ou simples
+    .Item(schema & "smtpauthenticate") = 1 ' 1 Ativa e 0 desativa a configuração para autenticação
+    .Item(schema & "sendusername") = "" 'E-mail ou usuário
+    .Item(schema & "sendpassword") = "" 'Senha do e-mail ou usuário
+    .Item(schema & "charset") = "UTF-8"
+    .Update
+End With
+
+'Configuração do e-mail
+With ConfiguracaoMensagem
+    .BodyPart.Charset = "utf-8" 'aplica a codificação dos caracteres PT-BR
+    .From = EmailRemetente 'Quem envia a mensagem
+    If IsEmpty(EmailsDestinatarios) = False And EmailsDestinatarios <> "" Then .To = EmailsDestinatarios 'Quem vai receber a mensagem
+    If IsEmpty(EmailsEmCopia) = False And EmailsEmCopia <> "" Then .CC = EmailsEmCopia
+    If IsEmpty(EmailsEmCopiaOculta) = False And EmailsEmCopiaOculta <> "" Then .BCC = EmailsEmCopiaOculta 'Copia oculta
+    
+    If IsArray(Anexo) Then
+        'Expande a lista de anexos para retornar um a um e incluir no envio
+        For Indice = LBound(Anexo) To UBound(Anexo)
+            'Caminho do arquivo + nome do arquivo que será anexado
+            If IsEmpty(Anexo(Indice)) = False And Anexo(Indice) <> "" Then .AddAttachment (Anexo(Indice))
+        Next Indice
+    End If
+    
+    .Subject = "" & AssuntoEmail & ""
+    'Corpo do e-mail | Mensagem está sendo formatada como HTML
+    .HTMLBody = "Olá, tudo bem? <br><br>" & _
+                "Segue fila de trabalho para atuação nesta data. <br>" & _
+                "Solicitamos que seja priorizado os casos vencidos, caso haja. <br><br>" & _
+                "O histórico com os demais arquivos está disponível em: <br>" & _
+                "<a href='" & C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.CaminhoRede & "'>" & C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.CaminhoRede & "</a>" & _
+                "<br><br>" & _
+                "" & C6Bank_Registro_EmailFilaTrabalhoOperacao.Rotina.MensagemArquivoAcimaDoTamanhoLimite & "" & _
+                "<br>" & _
+                "Em caso de dúvidas, favor entrar em contato com nosso Planejamento Estratégico." & _
+                "<br><br>" & _
+                "À disposição.<br>" & _
+                "<b>INFORMAÇÃO CONFIDENCIAL</b><br>" & _
+                "<b>PDTEC</b> | <i>E-mail encaminhado automaticamente</i>"
+    Set .Configuration = ConfiguracaoServidor 'Atribui a propriedade de configuração da porta as configurações do servidor atribuidas a variável
+    .send 'Send faz o envio do e-mail
+End With
+
+'Limpa as variáveis
+Set ConfiguracaoMensagem = Nothing
+Set ConfiguracaoServidor = Nothing
+
+End Sub
