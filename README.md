@@ -6,10 +6,34 @@
 
 
 ## Conteúdo das pastas
-### Funções
-### Métodos
-### Rotinas
 ### Dicas
+1. Pré-Atualização da Base de Dados
+2. Pré-Atualização da Consulta
+### Funções
+1. Concatena Dados de uma Coluna da Tabela
+2. Corrige Erros de Acentuação
+3. Corrige Erros de E-mails
+4. Cria uma Pasta no Local Indicado
+5. Emite um Alerta Informando que a Tabela Não tem Dados
+6. Gerencia Pastas e Histórico de Arquivos
+7. Identifica E-mails com Erro
+8. Identifica o Tamanho do Arquivo
+9. Remove Arquivo Existente
+10. Remove Linhas com Campos Vazios
+11. Remover Linha com Palavra Específica
+12. Retorna E-mails com Base em Critérios
+13. Retorna o Primeiro Dia Útil do Mês
+14. Testa Acesso a Pasta na Rede
+15. Testa Conexão com Servidor
+### Métodos
+1. Aguarda Antes de Continuar
+### Rotinas
+1. Compactar e Reparar Access
+2. Editar Arquivo Excel
+3. Envio de E-mail com Usuário e Senha
+4. Exportar Dados para Arquivo Excel
+5. Tabela no corpo do Email
+
 
 ## Instruções para utilização dos códigos
 
@@ -24,7 +48,6 @@ Os códigos já estão disponíveis separadamente.
 8. Não esqueça de manter a identação e organização dos códigos.
 
 Todos os códigos contidos neste repositórios são gratuitos e de uso livre, apenas solicito que referencie esse repositório.
-
 
 
 ## Requisitos do sistema
