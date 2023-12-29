@@ -1,0 +1,13 @@
+Function PrimeiroDiaUtilDoMes(ano As Integer, mes As Integer) As Date
+Dim data As Date
+
+data = DateSerial(ano, mes, 1) ' Obtenha o dia 1 do mês
+
+' Verifique se o dia 1 é um fim de semana (sábado ou domingo)
+While Weekday(data, vbMonday) > 5 ' Se for sábado (6) ou domingo (7)
+    data = DateAdd("d", 1, data) ' Avance para o próximo dia
+Wend
+
+PrimeiroDiaUtilDoMes = data
+
+End Function
