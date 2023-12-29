@@ -6,10 +6,10 @@
 
 
 ## Conteúdo das pastas
-### Dicas
+#### Dicas
 1. Pré-Atualização da Base de Dados
 2. Pré-Atualização da Consulta
-### Funções
+#### Funções
 1. Concatena Dados de uma Coluna da Tabela
 2. Corrige Erros de Acentuação
 3. Corrige Erros de E-mails
@@ -25,14 +25,15 @@
 13. Retorna o Primeiro Dia Útil do Mês
 14. Testa Acesso a Pasta na Rede
 15. Testa Conexão com Servidor
-### Métodos
+#### Métodos
 1. Aguarda Antes de Continuar
-### Rotinas
+#### Rotinas
 1. Compactar e Reparar Access
 2. Editar Arquivo Excel
 3. Envio de E-mail com Usuário e Senha
 4. Exportar Dados para Arquivo Excel
 5. Tabela no corpo do Email
+
 
 
 ## Instruções para utilização dos códigos
