@@ -1,4 +1,8 @@
+'Em algum momento a sua automação pode ter enviado ou gerado dados desatualizados, porém a fonte dos dados (Oracle, Excel, etc.) estava atualizada
+'O trecho abaixo é simples e eficiente. Vai abrir a consulta e ao fazer esse processo vai atualizar a conexão e consequentemente os dados
+'Aplique o trecho abaixo antes de fazer os seus processos de consulta, atualização, exclusão e etc.
+
 '_____________________________ PRÉ-ROTINA PRINCIPAL _____________________________
-DoCmd.OpenTable "NOME_DA_CONSULTA", acViewNormal, acReadOnly 'Abre a tabela principal para atualizar seus dados
-Sleep (5000) '_____ Aguarda 5 segundos antes de continuar
-DoCmd.Close acTable, "NOME_DA_CONSULTA", acSaveYes 'Fecha a tabela atualizando a conexão com a rede
+DoCmd.OpenTable "NOME_DA_CONSULTA", acViewNormal, acReadOnly 'Abre a consulta | Ao abrir força uma atualização dos dados
+Sleep (5000) '_____ Aguarda 5 segundos antes de continuar | confira a pasta de métodos
+DoCmd.Close acTable, "NOME_DA_CONSULTA", acSaveYes 'Fecha a consulta atualizando os dados
