@@ -1,5 +1,6 @@
 'Em algum momento a sua automação pode ter enviado ou gerado dados desatualizados, porém a fonte dos dados (Oracle, Excel, etc.) estava atualizada
 'O trecho abaixo é simples e eficiente. Vai abrir a tabela e ao fazer esse processo vai atualizar a conexão e consequentemente os dados
+'Aplique o trecho abaixo antes de fazer os seus processos de consulta, atualização, exclusão e etc.
 
 '_____________________________ PRÉ-ROTINA PRINCIPAL _____________________________
 DoCmd.OpenTable "NOME_DA_TABELA", acViewNormal, acReadOnly 'Abre a tabela | Ao abrir força uma atualização dos dados
