@@ -5,6 +5,12 @@
 - Compartilhar gratuitamente rotinas, funções e afins previamente desenvolvidos
 
 
+## Conteúdo das pastas
+### Funções
+### Métodos
+### Rotinas
+### Dicas
+
 ## Instruções para utilização dos códigos
 
 Os códigos já estão disponíveis separadamente.
