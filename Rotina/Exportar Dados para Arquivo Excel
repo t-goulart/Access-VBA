@@ -53,7 +53,7 @@ If IsEmpty(Excel_WS.Range("A2").Value) = False Then
     QtdeColunasDaTabela = Excel_WS.Range("A2").End(xlToRight).Column
     
     'Apaga o espaço identificado como preenchido
-    Excel_WS.Range(Excel_WS.Cells(2, 1), Excel_WS.Cells(QtdeLinhasDaTabela, QtdeColunasDaTabela)).Delete
+    Excel_WS.Range(Excel_WS.Cells(2, 1), Excel_WS.Cells(QtdeLinhasDaTabela, QtdeColunasDaTabela)).Rows.Delete
 
 End If
 
